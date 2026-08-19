@@ -1,0 +1,35 @@
+# Environment / secrets
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Model artifacts & local data
+app/models/artifacts/*
+!app/models/artifacts/.gitkeep
+ml/data/*
+!ml/data/.gitkeep
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Runtime audit output (local)
+ml/audit_fallback.jsonl
+
+# Redundant dataset archive (extracted CSVs are committed)
+dataset.zip

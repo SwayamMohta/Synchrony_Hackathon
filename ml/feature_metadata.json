@@ -1,0 +1,15 @@
+{
+  "medians": {
+    "RevolvingUtilizationOfUnsecuredLines": 0.154180737,
+    "age": 52.0,
+    "NumberOfTime30-59DaysPastDueNotWorse": 0.0,
+    "DebtRatio": 0.366507841,
+    "MonthlyIncome": 5400.0,
+    "NumberOfOpenCreditLinesAndLoans": 8.0,
+    "NumberOfTimes90DaysLate": 0.0,
+    "NumberRealEstateLoansOrLines": 1.0,
+    "NumberOfTime60-89DaysPastDueNotWorse": 0.0,
+    "NumberOfDependents": 0.0
+  },
+  "version": "v1"
+}
