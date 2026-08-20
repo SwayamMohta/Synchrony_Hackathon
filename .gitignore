@@ -30,6 +30,10 @@ Thumbs.db
 
 # Runtime audit output (local)
 ml/audit_fallback.jsonl
+ml/rag_audit_fallback.jsonl
+
+# Downloaded regulatory policy PDFs (re-downloadable; authored .md is committed)
+policies/*.pdf
 
 # Redundant dataset archive (extracted CSVs are committed)
 dataset.zip

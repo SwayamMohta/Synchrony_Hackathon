@@ -65,16 +65,37 @@ CREATE TABLE policies (
     source_path TEXT,
     policy_version TEXT,
     content TEXT,
+    content_hash TEXT,
+    effective_date DATE,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE policy_embeddings (
     id BIGSERIAL PRIMARY KEY,
     policy_id TEXT REFERENCES policies(policy_id),
+    chunk_id TEXT UNIQUE NOT NULL,
     chunk_index INT,
+    section_path TEXT,
+    rule_id TEXT,
     chunk_text TEXT,
     embedding vector(384),
+    embedding_model TEXT,
+    chunker_version TEXT,
+    policy_version TEXT,
+    content_tsv tsvector,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE INDEX ON policy_embeddings USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX ON policy_embeddings USING gin (content_tsv);
+
+CREATE TABLE rag_audit (
+    id BIGSERIAL PRIMARY KEY,
+    application_id TEXT,
+    question TEXT,
+    decision TEXT,
+    status TEXT,
+    cited_chunk_ids JSONB,
+    validation_ok BOOLEAN,
+    created_at TIMESTAMPTZ DEFAULT now()
+);

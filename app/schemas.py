@@ -52,3 +52,18 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: str
+
+class AnalystAskRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+    application_id: str
+
+class PolicyBasisItem(BaseModel):
+    chunk_id: str
+    claim: str
+
+class AnalystAskResponse(BaseModel):
+    status: str
+    decision_outcome: Optional[str] = None
+    explanation: str
+    policy_basis: list[PolicyBasisItem] = []
+    limitations: list[str] = []
