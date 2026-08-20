@@ -41,14 +41,6 @@ interface AnalyticsWorkspaceProps {
   onTabChange?: (tab: AnalyticsSubTab) => void;
 }
 
-const DECISION_COLORS: Record<string, string> = {
-  APPROVE: '#0f172a',
-  REFER: '#64748b',
-  DECLINE: '#cbd5e1',
-};
-
-const SEGMENT_COLORS = ['#0f172a', '#334155', '#64748b', '#94a3b8', '#cbd5e1', '#e2e8f0'];
-
 export const AnalyticsWorkspace: React.FC<AnalyticsWorkspaceProps> = ({
   cases,
   selectedCaseId,
@@ -122,50 +114,37 @@ export const AnalyticsWorkspace: React.FC<AnalyticsWorkspaceProps> = ({
     };
   }, [activeCase]);
 
-  // ── Donut Chart Data: Decision Distribution ──
-  const decisionChartData = useMemo(() => {
-    const counts: Record<string, number> = { APPROVE: 0, REFER: 0, DECLINE: 0 };
-    cases.forEach(c => {
-      counts[c.decision] = (counts[c.decision] || 0) + 1;
-    });
+  // ── Applicant Risk Profile Chart Data (credit vs fraud) ──
+  const riskProfileData = useMemo(() => {
+    if (!activeCase) return [];
+    const credit = Math.round(activeCase.creditRisk.score * 100);
+    const fraud = Math.round(activeCase.fraudSignals.overallRiskScore * 100);
     return [
-      { name: 'Approve', value: counts['APPROVE'] || 0, color: DECISION_COLORS.APPROVE },
-      { name: 'Refer', value: counts['REFER'] || 0, color: DECISION_COLORS.REFER },
-      { name: 'Decline', value: counts['DECLINE'] || 0, color: DECISION_COLORS.DECLINE },
-    ].filter(d => d.value > 0);
-  }, [cases]);
+      { name: 'Credit Risk', value: credit, fill: credit >= 60 ? '#dc2626' : credit >= 35 ? '#d97706' : '#16a34a' },
+      { name: 'Fraud Risk', value: fraud, fill: fraud > 70 ? '#dc2626' : fraud > 40 ? '#d97706' : '#16a34a' },
+    ];
+  }, [activeCase]);
 
-  // ── Donut Chart Data: Segment Breakdown ──
-  const segmentChartData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    cases.forEach(c => {
-      counts[c.applicant.segment] = (counts[c.applicant.segment] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, value], idx) => ({
-      name,
-      value,
-      color: SEGMENT_COLORS[idx % SEGMENT_COLORS.length],
-    }));
-  }, [cases]);
+  // ── Applicant Cash-Flow Profile (monthly income/expenses/debt) ──
+  const cashFlowData = useMemo(() => {
+    if (!activeCase) return [];
+    const a = activeCase.applicant;
+    return [
+      { name: 'Monthly Income', value: a.monthlyIncome, fill: '#0f172a' },
+      { name: 'Monthly Expenses', value: a.monthlyExpenses, fill: '#64748b' },
+      { name: 'Debt Payments', value: a.monthlyDebtPayments, fill: '#cbd5e1' },
+    ];
+  }, [activeCase]);
 
-  // ── Bar Chart Data: Segment Loan Exposure (₹ Lakhs) ──
-  const segmentExposureData = useMemo(() => {
-    const map: Record<string, { total: number; approved: number }> = {};
-    cases.forEach(c => {
-      const seg = c.applicant.segment;
-      if (!map[seg]) map[seg] = { total: 0, approved: 0 };
-      map[seg].total += c.applicant.requestedAmount;
-      if (c.decision === 'APPROVE') {
-        map[seg].approved += c.applicant.requestedAmount;
-      }
-    });
-
-    return Object.entries(map).map(([segment, val]) => ({
-      segment,
-      demandedLakhs: Math.round((val.total / 100000) * 10) / 10,
-      approvedLakhs: Math.round((val.approved / 100000) * 10) / 10,
-    }));
-  }, [cases]);
+  // ── Applicant Loan Demand vs Income (affordability, ₹ Lakhs) ──
+  const affordabilityData = useMemo(() => {
+    if (!activeCase) return [];
+    const a = activeCase.applicant;
+    return [
+      { name: 'Requested', value: a.requestedAmount, fill: '#0f172a' },
+      { name: 'Annual Income', value: a.annualIncome, fill: '#64748b' },
+    ];
+  }, [activeCase]);
 
   // ── Model Comparison Bar Chart Data ──
   const modelComparisonChartData = useMemo(() => {
@@ -213,7 +192,7 @@ export const AnalyticsWorkspace: React.FC<AnalyticsWorkspaceProps> = ({
               Portfolio Analytics & Telemetry Center
             </h1>
             <p className="text-xs text-[#667085]">
-              Real-time underwriting distributions, model discrimination benchmarks, and telemetry forensics
+              Per-applicant risk, cash-flow and affordability metrics, model discrimination benchmarks, and telemetry forensics
             </p>
           </div>
         </div>
@@ -229,7 +208,7 @@ export const AnalyticsWorkspace: React.FC<AnalyticsWorkspaceProps> = ({
             }`}
           >
             <PieChartIcon className="w-3.5 h-3.5 text-slate-700" />
-            <span>Portfolio Charts</span>
+            <span>Applicant Stats</span>
           </button>
 
           <button
@@ -355,107 +334,102 @@ export const AnalyticsWorkspace: React.FC<AnalyticsWorkspaceProps> = ({
             </div>
           )}
 
-          {activeTab === 'distribution' && (
+          {activeTab === 'distribution' && activeCase && (
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
-              {/* Donut Chart 1: Decision Distribution */}
+              {/* Bar Chart 1: Credit vs Fraud Risk Profile */}
               <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs flex flex-col justify-between">
                 <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
                     <PieChartIcon className="w-3.5 h-3.5 text-slate-900" />
-                    <span>Decision Distribution</span>
+                    <span>Risk Profile</span>
                   </div>
-                  <span className="text-[10px] font-mono text-slate-500">{cases.length} cases</span>
-                </div>
-
-                <div className="h-44 mt-1 relative">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={decisionChartData}
-                        innerRadius={36}
-                        outerRadius={54}
-                        paddingAngle={3}
-                        dataKey="value"
-                      >
-                        {decisionChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(value: any, name: any) => [`${value} applicants`, name]}
-                        contentStyle={{ background: '#0f172a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 10 }}
-                      />
-                      <Legend
-                        verticalAlign="bottom"
-                        height={24}
-                        formatter={(val) => <span className="text-[10px] font-medium text-slate-700">{val}</span>}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Donut Chart 2: Segment Allocation */}
-              <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs flex flex-col justify-between">
-                <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-                    <PieChartIcon className="w-3.5 h-3.5 text-slate-900" />
-                    <span>Applicant Segment Share</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-slate-500">Volume</span>
-                </div>
-
-                <div className="h-44 mt-1 relative">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={segmentChartData}
-                        innerRadius={36}
-                        outerRadius={54}
-                        paddingAngle={3}
-                        dataKey="value"
-                      >
-                        {segmentChartData.map((entry, index) => (
-                          <Cell key={`cell-seg-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(value: any, name: any) => [`${value} cases`, name]}
-                        contentStyle={{ background: '#0f172a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 10 }}
-                      />
-                      <Legend
-                        verticalAlign="bottom"
-                        height={24}
-                        formatter={(val) => <span className="text-[10px] font-medium text-slate-700">{val}</span>}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Bar Chart 3: Loan Exposure */}
-              <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs flex flex-col justify-between">
-                <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-                    <BarChart3 className="w-3.5 h-3.5 text-slate-900" />
-                    <span>Demand vs. Sanction (₹L)</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-slate-500">Exposure</span>
+                  <span className="text-[10px] font-mono text-slate-500">{activeCase.applicant.name}</span>
                 </div>
 
                 <div className="h-44 mt-1">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={segmentExposureData} margin={{ top: 8, right: 5, left: -20, bottom: 0 }}>
+                    <BarChart data={riskProfileData} margin={{ top: 8, right: 5, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                      <XAxis dataKey="segment" tick={{ fill: '#475569', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#cbd5e1' }} />
-                      <YAxis tick={{ fill: '#475569', fontSize: 10 }} tickLine={false} axisLine={false} unit="L" />
+                      <XAxis dataKey="name" tick={{ fill: '#475569', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#cbd5e1' }} />
+                      <YAxis domain={[0, 100]} tick={{ fill: '#475569', fontSize: 10 }} tickLine={false} axisLine={false} unit="%" />
                       <Tooltip
-                        formatter={(val: any) => [`₹${val} Lakhs`]}
+                        formatter={(val: any) => [`${val}%`]}
                         contentStyle={{ background: '#0f172a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 10 }}
+                        itemStyle={{ color: '#fff' }}
+                        labelStyle={{ color: '#fff' }}
                       />
                       <Legend verticalAlign="top" height={24} formatter={(val) => <span className="text-[10px] font-medium text-slate-700">{val}</span>} />
-                      <Bar dataKey="demandedLakhs" name="Requested (₹L)" fill="#cbd5e1" radius={[3, 3, 0, 0]} />
-                      <Bar dataKey="approvedLakhs" name="Approved (₹L)" fill="#0f172a" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="value" name="Score" radius={[3, 3, 0, 0]}>
+                        {riskProfileData.map((entry, index) => (
+                          <Cell key={`cell-rp-${index}`} fill={entry.fill} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Bar Chart 2: Monthly Cash-Flow Profile */}
+              <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs flex flex-col justify-between">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    <PieChartIcon className="w-3.5 h-3.5 text-slate-900" />
+                    <span>Monthly Cash-Flow</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-500">₹ / month</span>
+                </div>
+
+                <div className="h-44 mt-1">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={cashFlowData} margin={{ top: 8, right: 5, left: -12, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fill: '#475569', fontSize: 9 }} tickLine={false} axisLine={{ stroke: '#cbd5e1' }} />
+                      <YAxis tick={{ fill: '#475569', fontSize: 10 }} tickLine={false} axisLine={false} unit="k" />
+                      <Tooltip
+                        formatter={(val: any) => [`₹${(Number(val) / 1000).toFixed(1)}k`]}
+                        contentStyle={{ background: '#0f172a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 10 }}
+                        itemStyle={{ color: '#fff' }}
+                        labelStyle={{ color: '#fff' }}
+                      />
+                      <Legend verticalAlign="top" height={24} formatter={(val) => <span className="text-[10px] font-medium text-slate-700">{val}</span>} />
+                      <Bar dataKey="value" name="Amount" radius={[3, 3, 0, 0]}>
+                        {cashFlowData.map((entry, index) => (
+                          <Cell key={`cell-cf-${index}`} fill={entry.fill} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Bar Chart 3: Loan Demand vs Income (affordability) */}
+              <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs flex flex-col justify-between">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    <BarChart3 className="w-3.5 h-3.5 text-slate-900" />
+                    <span>Loan vs Income</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-500">₹ Lakhs</span>
+                </div>
+
+                <div className="h-44 mt-1">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={affordabilityData} margin={{ top: 8, right: 5, left: -12, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fill: '#475569', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#cbd5e1' }} />
+                      <YAxis tick={{ fill: '#475569', fontSize: 10 }} tickLine={false} axisLine={false} unit="L" />
+                      <Tooltip
+                        formatter={(val: any) => [`₹${(Number(val) / 100000).toFixed(1)} Lakhs`]}
+                        contentStyle={{ background: '#0f172a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 10 }}
+                        itemStyle={{ color: '#fff' }}
+                        labelStyle={{ color: '#fff' }}
+                      />
+                      <Legend verticalAlign="top" height={24} formatter={(val) => <span className="text-[10px] font-medium text-slate-700">{val}</span>} />
+                      <Bar dataKey="value" name="Amount" radius={[3, 3, 0, 0]}>
+                        {affordabilityData.map((entry, index) => (
+                          <Cell key={`cell-aff-${index}`} fill={entry.fill} />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -487,6 +461,8 @@ export const AnalyticsWorkspace: React.FC<AnalyticsWorkspaceProps> = ({
                       <Tooltip
                         formatter={(val: any) => [`${val} AUC`]}
                         contentStyle={{ background: '#0f172a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 10 }}
+                        itemStyle={{ color: '#fff' }}
+                        labelStyle={{ color: '#fff' }}
                       />
                       <Legend verticalAlign="top" height={24} formatter={(val) => <span className="text-[10px] font-medium text-slate-700">{val}</span>} />
                       <Bar dataKey="baselineAuc" name="Logistic Baseline" fill="#cbd5e1" radius={[3, 3, 0, 0]} />
