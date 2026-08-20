@@ -1,50 +1,53 @@
 # HANDOVER
 
 ## Current objective
-Credit underwriting engine (PRISM-style). All Must-Have + RAG work complete and live-verified. "Frontend syn" React app is the main frontend, fully wired to the backend/RAG (no mock data). This session added final data-integrity/UX polish: deterministic applicant names, DB-backed display profile (fabricated frontend fields removed), chat persistence fix, rotating loading statuses, audit button removed. 83 tests passing, build clean. Only commit + push + user walkthrough remain.
+Credit underwriting engine (PRISM-style) for NTC/thin-file applicants: React + FastAPI + PostgreSQL(+pgvector) + XGBoost credit model + rule-based fraud + SHAP + deterministic policy + audit + JWT auth + RAG policy assistant. All Must-Have + RAG work complete and live-verified. This session did whole-website verification, fixed remaining loose ends, and committed + pushed everything to GitHub.
 
 ## What was completed
 - Full Must-Have: React + FastAPI + PostgreSQL(+pgvector) + XGBoost credit model + rule-based fraud + SHAP + deterministic policy + audit (JSONL fallback) + JWT auth.
-- Decisioning refactor (explicit controlled inputs, no hidden generation; bureau/cashflow mocks deleted).
-- 4 final decisioning corrections: DebtRatio = `(monthly_debt_payments + avg_monthly_expenses) / (annual_income/12)`; affordability REFER before credit thresholds; high-debt scenario 0.84 expense ratio; fraud label "Rule-based fraud risk score".
-- Credit model recall fix (`ml/train_credit.py`): scale_pos_weight + balanced LR + Youden threshold. Recall 0.199 -> 0.816; AUC 0.8673.
-- Fraud ML model (`ml/train_fraud.py`, IEEE-CIS, standalone demo): XGBoost AUC 0.9392, recall 0.8384. Pipeline stays rule-based.
-- Security hardening: role enforcement (`require_role(*roles)`, admin-only `GET /v1/audit/logs`) + slowapi rate limiting (login 5/min, decision 30/min). `app/rate_limit.py`, `app/api/audit.py`.
-- Edge-case hardening (`tests/test_edge_cases.py`, 27 tests); JWT missing-role 500 -> 401; empty-string device/IP skipped.
-- RAG policy assistant (read-only) complete: `app/rag/` (chunking, bge-small-en-v1.5 embeddings, dense+FTS+RRF retrieval, cross-encoder reranker, guardrails, prompts, provider-agnostic llm_client, ingest), `POST /v1/analyst/ask`, `get_decision_snapshot`/`write_rag_audit`, schema migration, 7 RBI PDFs + `policies/underwriting-policy-v1.md`, `PolicyAssistant.jsx`, `tests/test_rag.py`. Live verified + 20-question QA pass.
-- Polish pass: reranker, scaled LR baselines (convergence warning cleared), offline integration tests, cache-friendly prompt docs, test env-isolation. Suite at 74.
-- "Frontend syn" integration: new `Frontend syn/` React+TS+Tailwind app became main frontend, wired end-to-end (backend `GET /v1/applications`, `GET /v1/applications/{id}`, `GET /v1/metrics/model-eval`; extended `ApplicantInput`; snapshot exposes `fraud_signals` + `shap_top_features` + `application_id`; optional `application_id` on `/v1/analyst/ask`). Frontend `services/api.ts` mapper + real loaders; `src/mock/` deleted; PolicyAssistant seed stripped.
-- UI polish: deterministic applicant names, compact affordability, Full Underwriting Inspection 70/30 + context rail, SHAP separated from reason codes, CORS comma-separated origins.
-- UX/data-integrity polish (THIS SESSION, all uncommitted):
-  1. **Deterministic applicant names** — `mapSnapshotToApplicationCase` falls back to a 10-name fictional Indian list hashed on `application_id`/`request_id`/`applicant_id` when `inputs.name` is absent. Kills old test labels (`live2`, `e-refer`, `eval-approve`, `app-rag-demo2`) that surfaced from legacy `applicant_id`s.
-  2. **DB single source of truth for display fields** — new `app/decisioning/profile.py::build_profile()` computes only real derived fields (segment, risk_band, fraud_level, dti, income_stability, expense_profile, behavioral_signals, bank_cashflow_surplus); stored in `evidence["profile"]` at decision time; exposed + read-time backfilled for legacy rows (`_ensure_profile`). Frontend `DecisionSnapshot.profile` typed; mapper reads `s.profile`. **Removed fabricated fields**: per-case `baselineScore` (credit*1.1), `avgAccountBalance` (income*1.2), `upiTransactionConsistency` placeholder; ThinFilePanel now a 3-tile strip.
-  3. **Chat persistence fix** — `handleSend` saves the user message + session optimistically BEFORE the API call, so chats always land in Recents and survive new-chat/reload even when the backend/Docker/LLM is down (previously saved only after a successful response; failures lost the chat). Assistant error bubble appended on failure.
-  4. **Rotating status messages** — new `Frontend syn/src/hooks/useRotatingStatus.ts`; Decision run button cycles "Pondering…/Musing…/Crunching the numbers…/Consulting the policy manual…/Weighing the risk…"; PolicyAssistant bubble cycles its own phrases.
-  5. **Audit button removed** — Admin Audit Log button + `AuditLogTable.tsx` deleted from Decision Engine page; audit stays reachable via Analytics → Audit tab + admin-only `GET /v1/audit/logs`.
-- Tests: `tests/test_applications.py` +4 (profile present/correct, THIN-FILE vs ESTABLISHED, legacy backfill). 83 total.
+- Decisioning refactor + 4 final corrections (DebtRatio formula, affordability REFER before credit thresholds, high-debt 0.84 expense ratio, "Rule-based fraud risk score" label).
+- Credit model recall fix: recall 0.199 -> 0.816; AUC 0.8673.
+- Fraud ML model (IEEE-CIS, standalone demo): AUC 0.9392 / recall 0.8384. Pipeline stays rule-based.
+- Security hardening: `require_role`, admin-only `GET /v1/audit/logs`, slowapi rate limiting (login 5/min, decision 30/min).
+- Edge-case hardening; JWT missing-role 500 -> 401.
+- RAG policy assistant (read-only): `app/rag/` (chunking, bge-small-en-v1.5, dense+FTS+RRF, cross-encoder reranker, guardrails, provider-agnostic llm_client, ingest), `POST /v1/analyst/ask`, schema (policies/policy_embeddings/rag_audit), 7 RBI PDFs + `policies/underwriting-policy-v1.md`, `tests/test_rag.py`.
+- "Frontend syn" React+TS+Tailwind app is the main frontend, wired end-to-end (no mock data).
+- **Whole-website verification (this session)**: live smoke-tested ALL backend endpoints (health, auth, decision, applications list/detail, audit admin-gated, metrics, analyst/ask incl. guardrail refusal + audit). RAG confirmed ingested (561 chunks / 8 policies); audit trails to Postgres. No broken endpoints, no 5xx. All frontend routes render (added `src/test/pages.test.tsx`).
+- **RAG "Recents" bug fix**: stale `policylens_active_session_id` (truthy but matching no session) made `handleSend` take the append branch and never create a chat. Fixed with a `hasActiveSession` guard in `PolicyAssistant.tsx::handleSend`; added vitest harness (`src/test/`, `vitest.config.ts`, `npm test` script) + 3 regression tests. Also made "New chat" clear the stale active-session key.
+- **Decision contract fix**: `app/schemas.py::DecisionResult` + `app/decisioning/pipeline.py` now return `fraud_signals` and `profile` (were computed/stored but omitted from the response). Verified live.
+- **`getAuditLogs` shape fix**: `underwritingApi.ts` now unwraps the backend `{logs:[...]}` envelope.
+- **Build regression fix**: `src/test/pages.test.tsx` had TS errors breaking `tsc -b`; removed unused imports + cast `importOriginal`.
+- **Dead component cleanup (user-confirmed)**: deleted `FraudInvestigation.tsx`, `FraudInvestigationPage.tsx`, `PendingCasesWidget.tsx`, `AuditTrail.tsx`, `ModelEvaluation.tsx`.
+- **RAG starter-query loose end fix**: 2 of 4 suggested query cards referenced nonexistent policy sections (DTI under 4.2; thin-file under 5.1) causing refusals; rewrote to reference real answerable content (verified `answered` with citations live).
+- **Analytics stats tab**: recharts Tooltip hover text now white (`itemStyle`/`labelStyle`); "Applicant Stats" tab shows per-applicant charts (Risk Profile / Monthly Cash-Flow / Loan vs Income) instead of portfolio aggregates; removed unused DECISION_COLORS/SEGMENT_COLORS.
+- **README.md rewritten** (PRISM overview, problem, solution, architecture mermaid, decision flow, API table, setup, limitations) with NO em dashes.
+- **Favicon changed** to a bee mark matching the BeeBot/PolicyLens theme (`Frontend syn/public/favicon.svg`).
+- Tests: backend 83 passing; frontend 15/15 (PolicyAssistant + pages).
 
 ## What changed
-- New: `app/decisioning/profile.py`, `Frontend syn/src/hooks/useRotatingStatus.ts`, `app/api/applications.py`, `app/api/metrics.py`, `tests/test_applications.py` (all untracked).
-- `app/decisioning/pipeline.py` — stores `profile` in audit evidence.
-- `app/audit/logger.py` — `_ensure_profile` backfill; snapshots expose `profile`.
-- `Frontend syn/src/services/api.ts` — FALLBACK_NAMES + hash; reads `s.profile`; removed baseline/avg-balance/UPI.
-- `Frontend syn/src/api/underwritingApi.ts` — `DecisionSnapshot.profile` type.
-- `Frontend syn/src/types/underwriting.ts` — dropped `baselineVersion/baselineType/baselineScore` from `CreditRisk`, `avgAccountBalance/upiTransactionConsistency` from supplementary signals.
-- `Frontend syn/src/components/assistant/PolicyAssistant.tsx` — optimistic session save + error bubble + rotating status.
-- `Frontend syn/src/components/decision/DecisionEngineView.tsx` — rotating status; audit button/state/import removed.
-- `Frontend syn/src/components/underwriting/ThinFilePanel.tsx` — 3-tile strip (Bureau History / Income Stability / Cash Surplus).
-- Deleted: `Frontend syn/src/components/decision/AuditLogTable.tsx`.
-- Earlier session (still uncommitted): `app/api/analyst.py`, `app/main.py` (CORS list), `app/schemas.py`, `app/rag/{llm_client,prompts}.py`, `.env.example`, `README.md`.
+- `app/schemas.py` — `DecisionResult` now returns `fraud_signals` + `profile` (optional); `ApplicantInput` identity fields; `AnalystAskRequest.application_id` optional.
+- `app/decisioning/pipeline.py` — returns `fraud_signals` + `profile`; stores `profile` in audit evidence.
+- `app/audit/logger.py` — `_ensure_profile` backfill; snapshots expose `profile`/`fraud_signals`/`shap_top_features`/`application_id`/`timestamp`.
+- `app/api/{applications,metrics}.py`, `app/decisioning/profile.py`, `tests/test_applications.py` — new.
+- `app/api/analyst.py`, `app/main.py` (CORS list), `app/rag/{llm_client,prompts}.py` — optional snapshot/application_id handling.
+- `Frontend syn/src/components/assistant/PolicyAssistant.tsx` — RAG Recents fix (`hasActiveSession` guard), stale-key clear, starter-query rewording, case selector shows name-first, bee theme.
+- `Frontend syn/src/components/analytics/AnalyticsWorkspace.tsx` — per-applicant stats + white tooltips.
+- `Frontend syn/src/api/underwritingApi.ts` — `getAuditLogs` unwraps `{logs}`; `DecisionResponse` gains `fraud_signals`/`profile`.
+- `Frontend syn/src/test/` (PolicyAssistant.test.tsx, pages.test.tsx, setup.ts), `vitest.config.ts`, `package.json` test script — new test harness.
+- `Frontend syn/public/favicon.svg` — bee mark.
+- Deleted: `Frontend syn/src/components/{evaluation/ModelEvaluation.tsx, fraud/FraudInvestigation.tsx, governance/AuditTrail.tsx, workspace/PendingCasesWidget.tsx}`, `Frontend syn/src/pages/FraudInvestigationPage.tsx`.
+- `.gitignore` — added `Frontend syn/dist/`, `.vite/`, `node_modules/`.
+- `README.md`, `TRACKER.md` — rewritten/updated.
 
 ## Current status
-Done (core + polish + frontend integration + data-integrity polish). 83 tests passing; `npm run build` clean. Commits `c0b383e`..`0f35ba1` plus this session's work are LOCAL ONLY (not pushed); last pushed commit is `85745c9`. `Frontend syn/` is still entirely untracked.
+Done and pushed. Working tree clean at `4fd5a32` on `origin/main`. Backend 83 tests passing; frontend 15/15, build clean, lint 0 errors. Both commits `e8a63c6` and `4fd5a32` are on GitHub.
 
 ## Open issues
 - None blocking. LLM configured in `.env` (Groq `groq/compound-mini`, `https://api.groq.com/openai/v1`; Gemini key also present as fallback).
 - RAG needs Docker running for retrieval/ingest (verified working when up). Audit falls back to JSONL when down.
 - bge-small-en-v1.5 (~130 MB) and the cross-encoder (~90 MB) download on first ingest/live use.
-- Dead frontend code to optionally remove: legacy `frontend/` folder, `Frontend syn/src/components/fraud/FraudInvestigation.tsx` and `workspace/PendingCasesWidget.tsx` (not routed/imported).
-- `Frontend syn/` untracked — first commit of it needs a secrets scan (none expected).
+- Groq free-tier 429 rate limit intermittently engages the offline `FakeLLMClient` fallback (known/accepted; cannot fix without paid quota).
+- Legacy `frontend/` folder still exists (superseded by `Frontend syn/`) — optional cleanup, not yet done.
 
 ## Risks and caveats
 - Rate limits are in-memory (reset on restart) — fine for demo, not multi-instance production.
@@ -55,22 +58,24 @@ Done (core + polish + frontend integration + data-integrity polish). 83 tests pa
 - Model artifacts (`app/models/artifacts/*`, `ml/data/*`) are gitignored — regenerated locally, not in version control.
 
 ## Validation completed
-- `pytest tests/` -> 83 passed (incl. profile tests, reranker, integration, applications).
-- `npm run build` (Frontend syn) clean; bundle ~5KB lighter after AuditLogTable removal.
-- Deterministic names verified: `live2`->Rohan Kapoor, `e-refer`->Rohan Kapoor, `eval-approve`->Aarav Mehta, `app-rag-demo2`->Dev Patel.
-- Legacy profile backfill verified by unit test (`_normalize_db_row` on evidence without `profile`).
-- Earlier: RAG live end-to-end (Groq), 20-question QA, HTTP smoke, credit AUC 0.8673 / recall 0.816, fraud AUC 0.9392 / recall 0.8384, 22/22 flow check.
+- `pytest tests/` -> 83 passed.
+- `npm test` (Frontend syn) -> 15/15 passed (2 files).
+- `npm run build` (Frontend syn) -> clean (only non-fatal chunk-size warning).
+- `npm run lint` (oxlint) -> 0 errors (pre-existing warnings only, none in AnalyticsWorkspace).
+- Live `/v1/decision` response includes `fraud_signals` + `profile` (HTTP-verified).
+- Live RAG: corrected starter queries return `status=answered` with 6 grounded citations; guardrail correctly refuses ungroundable questions.
+- Live smoke of all endpoints passed (health, login, decision, applications list/detail, audit roles, metrics, analyst/ask).
+- Earlier: credit AUC 0.8673 / recall 0.816; fraud AUC 0.9392 / recall 0.8384; 20-question RAG QA; 22/22 flow check.
 
 ## Exact next steps
-1. Commit this session's work (new `Frontend syn/` + profile/chat/UI changes) and push all local commits since `85745c9` to GitHub.
-2. (User) Run API (`.venv\Scripts\python -m uvicorn app.main:app --reload`) + frontend (`npm run dev` in `Frontend syn/`) and walk the full workspace.
-3. Optional: delete legacy `frontend/` folder + dead `FraudInvestigation.tsx`/`PendingCasesWidget.tsx`.
+1. (Optional) Delete legacy `frontend/` folder (superseded by `Frontend syn/`).
+2. (User) Run API (`.venv\Scripts\python -m uvicorn app.main:app --reload`) + frontend (`npm run dev` in `Frontend syn/`) and walk the full workspace (Analytics > Applicant Stats to see the new per-applicant charts).
 
 ## Recommended model path for next session
 - `deepseek-v4-pro` for RAG/feature work; `deepseek-v4-flash` for mechanical edits/tests.
 
 ## Restart instructions
 - Open first: `TRACKER.md` + `HANDOVER.md`.
-- Do first: commit + `git push` (all local commits incl. this session; `Frontend syn/` first add).
-- Check first: `pytest tests/` (83) + `npm run build` in `Frontend syn/`, then start Docker + run the API + frontend.
+- Do first: confirm `git status` is clean (should be at `4fd5a32`); pull latest on any machine.
+- Check first: `pytest tests/` (83) + `npm test` (15) + `npm run build` in `Frontend syn/`, then start Docker + run the API + frontend.
 - Stay in opencode. No escalation needed.
