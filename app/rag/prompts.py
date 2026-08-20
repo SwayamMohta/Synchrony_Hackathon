@@ -22,6 +22,20 @@ SYSTEM_PROMPT = (
 
 
 def build_user_prompt(question, decision_snapshot, chunks):
+    """Build the user message with a cache-friendly token order.
+
+    Providers (Groq, OpenAI, etc.) cache the longest common *prefix* of a
+    request. To maximize cache hits we keep the layout stable and order content
+    from most-stable to least-stable:
+
+      1. fixed section headers,
+      2. per-application decision facts (stable across questions for one app),
+      3. retrieved policy excerpts (vary per question),
+      4. the analyst question (most variable) last.
+
+    No timestamps, ids, or other volatile text are injected, and iteration
+    order is fixed, so identical inputs produce a byte-identical prompt.
+    """
     lines = []
     lines.append("Recorded decision facts:")
     lines.append(f"- outcome: {decision_snapshot.get('decision')}")

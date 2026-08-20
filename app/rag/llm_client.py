@@ -56,6 +56,11 @@ class OpenAILLMClient:
         client = OpenAI(**client_kwargs)
 
         user_prompt = build_user_prompt(question, decision_snapshot, chunks)
+        # Cache-friendly message order: the SYSTEM_PROMPT is a static, constant
+        # prefix (cached across requests); all variable content (decision facts,
+        # retrieved chunks, question) lives in the user message with the question
+        # last. temperature=0 keeps output deterministic so identical prompts
+        # also reuse the same cached completion where the provider supports it.
         resp = client.chat.completions.create(
             model=self.model,
             temperature=0,
