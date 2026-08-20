@@ -33,10 +33,10 @@ Scaffold core config + bring up infra + train the credit model. No app code yet.
 - No OpenAI key → skip RAG; everything else must work without it.
 
 ## Files / modules to open first
-- `C:\Users\mohta\Desktop\Synchrony\Plan.md` (§0, §7, §12, §17, §18; Implementation Snippets §7–§14)
-- `C:\Users\mohta\Desktop\Synchrony\TRACKER.md`
-- `C:\Users\mohta\Desktop\Synchrony\dataset\cs-training.csv`
-- `C:\Users\mohta\Desktop\Synchrony\.gitignore`
+- `docs/Plan.md` (§0, §7, §12, §17, §18; Implementation Snippets §7–§14)
+- `TRACKER.md`
+- `dataset/cs-training.csv`
+- `.gitignore`
 
 ## Intended next-session setup
 - Model family: deepseek-v4-pro

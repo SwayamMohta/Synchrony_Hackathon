@@ -5,13 +5,14 @@ export default function DecisionCard({ result }) {
   return (
     <div className="card decision-card">
       <h2 className={`decision-${result.decision}`}>{result.decision.toUpperCase()}</h2>
-      <p>Credit risk score: {result.credit_risk_score.toFixed(3)}</p>
-      <p>Fraud risk score: {result.fraud_risk_score.toFixed(3)}</p>
+      <p>Applicant: {result.applicant_id}</p>
+      <p>Predicted credit-risk score: {result.credit_risk_score.toFixed(3)}</p>
+      <p>Rule-based fraud risk score: {result.fraud_risk_score.toFixed(3)}</p>
       <p>Model: {result.model_version} | Features: {result.feature_schema_version} | Policy: {result.policy_version}</p>
       <p>Latency: {result.latency_ms.toFixed(1)} ms</p>
-      <h3>Reason codes</h3>
-      <ul>{result.reason_codes.map((rc) => <li key={rc}>{rc}</li>)}</ul>
-      <h3>SHAP feature attribution</h3>
+      <h3>Why this decision</h3>
+      <ul>{result.reason_codes.length ? result.reason_codes.map((rc) => <li key={rc}>{rc}</li>) : <li>No adverse reason codes</li>}</ul>
+      <h3>What influenced the model's score (SHAP)</h3>
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={featureData} layout="vertical">
           <XAxis type="number" />

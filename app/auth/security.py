@@ -36,13 +36,17 @@ def current_user(cred: HTTPAuthorizationCredentials | None = Depends(bearer)):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing credentials")
     try:
         payload = jwt.decode(cred.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        return {"sub": payload["sub"], "role": payload["role"]}
     except JWTError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
+    sub = payload.get("sub")
+    role = payload.get("role")
+    if not sub or not role:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
+    return {"sub": sub, "role": role}
 
-def require_role(role: str):
+def require_role(*roles: str):
     def dep(user: dict = Depends(current_user)):
-        if user["role"] != role:
+        if user["role"] not in roles:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient role")
         return user
     return dep

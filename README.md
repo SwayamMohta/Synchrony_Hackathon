@@ -8,7 +8,7 @@ A real-time, multi-modal credit underwriting engine that expands credit access t
 2. The engine assembles bureau-style features (mock), synthetic cash-flow, and deterministic fraud signals (velocity / identity consistency).
 3. A canonical feature builder maps bureau + applicant data onto the **10 real Give Me Some Credit features** (the exact training columns).
 4. An **XGBoost** credit model (with a Logistic Regression baseline) scores probability of default.
-5. A **rule-based fraud score** and a **deterministic policy engine** (hard guardrails) contribute to the final decision — ML cannot override policy.
+5. A **rule-based fraud score** and a **deterministic policy engine** (hard guardrails) contribute to the final decision — ML cannot override policy. (A standalone **XGBoost fraud model** trained on the IEEE-CIS dataset — AUC 0.9392 — is also delivered as a demonstration; see "Model evaluation".)
 6. **SHAP** produces per-decision feature attribution mapped to adverse-action **reason codes**.
 7. Every decision is written to an **append-only audit log** (PostgreSQL, with a JSONL fallback when the DB is down).
 
@@ -52,6 +52,16 @@ pip install -r requirements.txt
 
 Produces `app/models/artifacts/credit_risk_v1.json`, `app/models/artifacts/credit_baseline_v1.pkl`, `ml/feature_metadata.json`, `ml/data/holdout_predictions.pkl`.
 
+### 3b. Train the fraud model (optional, standalone demo)
+
+Requires the IEEE-CIS fraud files (`train_transaction.csv`, `train_identity.csv`) in `ieee-fraud-detection/`.
+
+```
+.venv\Scripts\python.exe ml\train_fraud.py
+```
+
+Produces `app/models/artifacts/fraud_risk_v1.json`, `ml/data/fraud_holdout_predictions.pkl`, `ml/data/fraud_metrics.json`. The decision pipeline stays rule-based; this model is a demonstration of ML fraud detection.
+
 ### 4. Run the API
 
 ```
@@ -70,11 +80,19 @@ npm run dev
 
 Open http://localhost:5173. Demo users: `analyst` / `analyst123`, `admin` / `admin123`.
 
+Role-based access: `/v1/decision` requires an analyst or admin role; `GET /v1/audit/logs` is admin-only. Rate limits: `/auth/login` 5/min, `/v1/decision` 30/min.
+
 ## Model evaluation
+
+Credit model (AUC uplift over logistic-regression baseline):
 
 ```
 .venv\Scripts\python.exe ml\evaluate.py
 ```
+
+Credit: XGBoost AUC 0.8673 vs LR baseline 0.8006, recall 0.816 at the Youden threshold (class-weight + threshold tuning) — see `ml/data/credit_metrics.json`.
+
+Fraud model (IEEE-CIS, standalone): XGBoost AUC 0.9392 vs LR baseline 0.78, PR-AUC 0.6361 — see `ml/data/fraud_metrics.json`.
 
 ## Tests
 
@@ -88,5 +106,5 @@ Open http://localhost:5173. Demo users: `analyst` / `analyst123`, `admin` / `adm
 - `cs-test.csv` has no labels (Kaggle withheld them), so held-out evaluation uses a stratified split of `cs-training.csv`.
 - Audit logging falls back to `ml/audit_fallback.jsonl` when PostgreSQL is unavailable.
 - RAG policy assistant is deferred (requires an OpenAI API key).
-- Rate limiting, role-based route enforcement, and Plaid Sandbox are planned but not yet wired.
+- Plaid Sandbox is planned but not yet wired.
 - Demo only — not production lending infrastructure.

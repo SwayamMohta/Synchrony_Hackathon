@@ -1,8 +1,18 @@
-import sys, os, json
+import sys, os, json, time
+import numpy as np
 import pandas as pd
 import xgboost as xgb
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import (
+    roc_auc_score,
+    average_precision_score,
+    roc_curve,
+    precision_score,
+    recall_score,
+    f1_score,
+    accuracy_score,
+    confusion_matrix,
+)
 import joblib
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -33,24 +43,65 @@ for c in CREDIT_FEATURES:
     X_test[c] = X_test[c].fillna(medians[c]).astype(float)
 y_test = test[TARGET]
 
+# Class imbalance: default rate ~6.7%, so weight the minority class.
+scale = float((y_train == 0).sum()) / float((y_train == 1).sum())
+print(f"scale_pos_weight = {scale:.3f}")
+
+t0 = time.perf_counter()
 model = xgb.XGBClassifier(
     n_estimators=300, max_depth=5, learning_rate=0.05,
-    subsample=0.8, colsample_bytree=0.8, eval_metric="auc", random_state=42,
+    subsample=0.8, colsample_bytree=0.8,
+    scale_pos_weight=scale, eval_metric="auc", random_state=42,
 )
 model.fit(X_train, y_train)
-auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
-model.save_model("app/models/artifacts/credit_risk_v1.json")
-print(f"XGBoost AUC: {auc:.4f}")
+xgb_train_time = time.perf_counter() - t0
+xgb_proba = model.predict_proba(X_test)[:, 1]
 
-bl = LogisticRegression(max_iter=1000, random_state=42)
+t = time.perf_counter()
+bl = LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42)
 bl.fit(X_train, y_train)
-bl_auc = roc_auc_score(y_test, bl.predict_proba(X_test)[:, 1])
+lr_train_time = time.perf_counter() - t
+lr_proba = bl.predict_proba(X_test)[:, 1]
+
+xgb_auc = roc_auc_score(y_test, xgb_proba)
+lr_auc = roc_auc_score(y_test, lr_proba)
+xgb_prauc = average_precision_score(y_test, xgb_proba)
+
+# Threshold via Youden's J on the ROC curve (not the default 0.5).
+fpr, tpr, thresholds = roc_curve(y_test, xgb_proba)
+j = tpr - fpr
+best_t = thresholds[np.argmax(j)]
+preds = (xgb_proba >= best_t).astype(int)
+
+metrics = {
+    "xgb_auc": round(float(xgb_auc), 4),
+    "lr_baseline_auc": round(float(lr_auc), 4),
+    "auc_uplift": round(float(xgb_auc - lr_auc), 4),
+    "xgb_pr_auc": round(float(xgb_prauc), 4),
+    "youden_threshold": round(float(best_t), 4),
+    "precision": round(float(precision_score(y_test, preds)), 4),
+    "recall": round(float(recall_score(y_test, preds)), 4),
+    "f1": round(float(f1_score(y_test, preds)), 4),
+    "accuracy": round(float(accuracy_score(y_test, preds)), 4),
+    "confusion_matrix": confusion_matrix(y_test, preds).tolist(),
+    "n_features": len(CREDIT_FEATURES),
+    "n_train": int(len(X_train)),
+    "n_test": int(len(X_test)),
+    "xgb_train_seconds": round(xgb_train_time, 2),
+    "lr_train_seconds": round(lr_train_time, 2),
+}
+
+model.save_model("app/models/artifacts/credit_risk_v1.json")
 joblib.dump(bl, "app/models/artifacts/credit_baseline_v1.pkl")
-print(f"Baseline AUC: {bl_auc:.4f}")
 
 joblib.dump(
-    {"y_test": y_test, "baseline_proba": bl.predict_proba(X_test)[:, 1],
-     "proposed_proba": model.predict_proba(X_test)[:, 1]},
+    {"y_test": y_test, "baseline_proba": lr_proba, "proposed_proba": xgb_proba,
+     "youden_threshold": best_t},
     "ml/data/holdout_predictions.pkl",
 )
-print("Saved artifacts and holdout predictions.")
+with open("ml/data/credit_metrics.json", "w") as fh:
+    json.dump(metrics, fh, indent=2)
+
+print("\n=== Credit model metrics ===")
+for k, v in metrics.items():
+    print(f"  {k}: {v}")

@@ -53,3 +53,36 @@ def _append_fallback(params):
     os.makedirs(os.path.dirname(_FALLBACK_PATH), exist_ok=True)
     with open(_FALLBACK_PATH, "a") as fh:
         fh.write(json.dumps(params) + "\n")
+
+def _normalize_fallback(p):
+    return {
+        "application_id": p.get("aid"),
+        "decision": p.get("dec"),
+        "credit_risk_score": p.get("cs"),
+        "fraud_risk_score": p.get("fs"),
+        "reason_codes": json.loads(p.get("rc") or "[]"),
+        "model_version": p.get("mv"),
+        "feature_schema_version": p.get("fsv"),
+        "policy_version": p.get("pv"),
+        "request_id": p.get("rid"),
+        "evidence": json.loads(p.get("ev") or "{}"),
+    }
+
+def read_audit_log(limit: int = 50) -> list[dict]:
+    eng = _get_engine()
+    if eng:
+        try:
+            with eng.connect() as conn:
+                rows = conn.execute(
+                    text("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT :l"),
+                    {"l": limit},
+                ).mappings().all()
+            return [dict(r) for r in rows]
+        except Exception:
+            pass
+    if not os.path.exists(_FALLBACK_PATH):
+        return []
+    with open(_FALLBACK_PATH) as fh:
+        lines = fh.readlines()
+    entries = [json.loads(l) for l in lines[-limit:]]
+    return [_normalize_fallback(e) for e in reversed(entries)]

@@ -33,3 +33,6 @@ ml/audit_fallback.jsonl
 
 # Redundant dataset archive (extracted CSVs are committed)
 dataset.zip
+
+# IEEE-CIS fraud dataset (large, not committed)
+ieee-fraud-detection/

@@ -1,30 +1,36 @@
-from app.rules.policy_engine import apply_policy
-from app.schemas import ApplicantInput, BureauFeatures, CashFlowFeatures
+from app.rules.policy_engine import apply_policy, has_affordability_concern, policy_reason_codes
+from app.schemas import ApplicantInput
 
-def _applicant():
-    return ApplicantInput(applicant_id="a1", age=30, annual_income=50000, requested_amount=1000, employment_length_years=2, device_id="d1", ip_address="0.0.0.0")
-
-def _bureau(delinq=0):
-    return BureauFeatures(bureau_score=550, num_tradelines=3, utilization_ratio=0.5, delinquencies_24mo=delinq, credit_history_months=36)
+def _applicant(**overrides):
+    base = dict(
+        applicant_id="a1", age=30, dependents=0, annual_income=60000,
+        requested_amount=1000, credit_utilization=0.3, num_open_credit_lines=5,
+        delinquencies_30_59=0, delinquencies_60_89=0, delinquencies_90_plus=0,
+        num_real_estate_loans=0, monthly_debt_payments=500,
+        avg_monthly_income=5000, avg_monthly_expenses=2000, overdraft_count_90d=0,
+        device_id="d1", ip_address="1.2.3.4",
+    )
+    base.update(overrides)
+    return ApplicantInput(**base)
 
 def test_declines_severe_delinquency():
-    r = apply_policy(_applicant(), _bureau(delinq=5), None, {"apps_per_ip_24h": 1.0})
+    r = apply_policy(_applicant(delinquencies_90_plus=4))
     assert not r.passed
-    assert "no_severe_delinquency" in r.violated_rules
+    assert "severe_delinquency" in r.violated_rules
 
-def test_declines_max_velocity():
-    r = apply_policy(_applicant(), _bureau(), None, {"apps_per_ip_24h": 6.0})
-    assert not r.passed
-    assert "max_velocity" in r.violated_rules
-
-def test_declines_high_dti():
-    cf = CashFlowFeatures(avg_monthly_income=4000, avg_monthly_expenses=3800, overdraft_count_90d=0, income_stability_score=0.8)
-    r = apply_policy(_applicant(), _bureau(), cf, {"apps_per_ip_24h": 1.0})
-    assert not r.passed
-    assert "max_dti" in r.violated_rules
-
-def test_passes_clean_application():
-    cf = CashFlowFeatures(avg_monthly_income=5000, avg_monthly_expenses=2000, overdraft_count_90d=0, income_stability_score=0.9)
-    r = apply_policy(_applicant(), _bureau(), cf, {"apps_per_ip_24h": 1.0})
+def test_no_decline_for_single_90_day_late():
+    r = apply_policy(_applicant(delinquencies_90_plus=1))
     assert r.passed
-    assert r.violated_rules == []
+
+def test_declines_high_expense_ratio():
+    r = apply_policy(_applicant(avg_monthly_income=4000, avg_monthly_expenses=3800))
+    assert not r.passed
+    assert "expense_ratio" in r.violated_rules
+
+def test_affordability_concern_threshold():
+    assert has_affordability_concern(_applicant(requested_amount=50000)) is True
+    assert has_affordability_concern(_applicant(requested_amount=1000)) is False
+
+def test_policy_reason_codes():
+    assert policy_reason_codes(["expense_ratio"]) == ["Expense-to-income ratio exceeds limit"]
+    assert policy_reason_codes(["severe_delinquency"]) == ["Repeated severe (90+ day) delinquency"]
