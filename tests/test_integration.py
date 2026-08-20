@@ -1,14 +1,8 @@
-import os
 import pytest
 from fastapi.testclient import TestClient
 
 import app.audit.logger as audit_mod
-
-_saved_env = dict(os.environ)
-from app.main import app  # noqa: E402  (import triggers load_dotenv; see below)
-os.environ.clear()
-os.environ.update(_saved_env)  # undo .env pollution so it doesn't leak into other tests
-
+from app.main import app
 from app.auth.security import create_access_token
 
 APPLICANT = {
