@@ -59,14 +59,24 @@ applicant's ongoing spending is sustainable relative to income.
 
 ### 2.2 Loan amount relative to income (affordability)
 
-Affordability is the requested loan amount divided by average monthly income. A request
-that is large relative to income signals repayment stress and is routed for manual
-review.
+There is no fixed maximum loan amount or borrowing cap. The limit on how much an
+applicant may borrow is set relative to income. Affordability is the requested loan
+amount divided by average monthly income. A request that is large relative to income
+signals repayment stress and is routed for manual review.
 
 - If the requested amount is more than **6 times** monthly income, the application is
-  **referred** for human review.
+  **referred** for human review (flagged for manual assessment).
 
 **Reason code:** "Requested amount is large relative to income"
+
+### 2.3 Debt ratio (debt-to-income)
+
+The debt ratio is a derived measure of how much of a borrower's monthly gross income is
+consumed by debt and living costs. It is an input to the credit-risk model; a higher
+debt ratio indicates greater repayment burden.
+
+**Formula:** (monthly debt payments + average monthly expenses) divided by monthly gross
+income, where monthly gross income is annual income divided by 12.
 
 ---
 

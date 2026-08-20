@@ -39,7 +39,7 @@ class OpenAILLMClient:
     name = "openai"
 
     def __init__(self, model=None, api_key=None, base_url=None):
-        self.model = model or os.environ.get("OPENAI_MODEL_ID", "gpt-4o-mini")
+        self.model = model or "gemini-3.6-flash"
         self.api_key = api_key
         self.base_url = base_url
 
@@ -69,15 +69,25 @@ class OpenAILLMClient:
 
 
 def get_llm_client():
-    gemini_key = os.environ.get("GEMINI_API_KEY")
-    if gemini_key:
-        return OpenAILLMClient(
-            api_key=gemini_key,
-            base_url=os.environ.get(
-                "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"
-            ),
-            model=os.environ.get("GEMINI_MODEL_ID", "gemini-3.6-flash"),
-        )
-    if os.environ.get("OPENAI_API_KEY"):
-        return OpenAILLMClient()
-    return FakeLLMClient()
+    """Return the configured LLM client.
+
+    Any OpenAI-compatible free provider works (Gemini, Groq, Cerebras, OpenRouter,
+    etc.) via these env vars (checked in priority order):
+
+      LLM_API_KEY  (or GEMINI_API_KEY)
+      LLM_BASE_URL (or GEMINI_BASE_URL)
+      LLM_MODEL_ID (or GEMINI_MODEL_ID)
+
+    With no key configured, returns the offline FakeLLMClient.
+    """
+    api_key = os.environ.get("LLM_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return FakeLLMClient()
+
+    base_url = os.environ.get("LLM_BASE_URL") or os.environ.get("GEMINI_BASE_URL")
+    model = (
+        os.environ.get("LLM_MODEL_ID")
+        or os.environ.get("GEMINI_MODEL_ID")
+        or "gemini-3.6-flash"
+    )
+    return OpenAILLMClient(api_key=api_key, base_url=base_url, model=model)

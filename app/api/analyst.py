@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.audit.logger import get_decision_snapshot, write_rag_audit
 from app.auth.roles import analyst
-from app.rag.guardrails import refusal_message, validate_answer
+from app.rag.guardrails import is_decision_request, refusal_message, validate_answer
 from app.rag.llm_client import get_llm_client
 from app.rag.retrieval import RetrievalUnavailable, retrieve
 from app.rate_limit import limiter
@@ -12,10 +12,11 @@ router = APIRouter()
 
 
 def _build_retrieval_query(question, snapshot):
+    decision = snapshot.get("decision")
     reasons = snapshot.get("reason_codes") or []
     if reasons:
-        return f"{question}\nExplain outcome {snapshot.get('decision')} for reason codes: {', '.join(reasons)}"
-    return question
+        return f"{question}\nExplain outcome {decision} for reason codes: {', '.join(reasons)}"
+    return f"{question}\nExplain outcome {decision}: decision rules, thresholds, and limits"
 
 
 @router.post("/v1/analyst/ask", response_model=AnalystAskResponse)
@@ -25,13 +26,23 @@ async def ask(request: Request, body: AnalystAskRequest, user: dict = Depends(an
     if snapshot is None:
         raise HTTPException(status_code=404, detail="Decision not found for application")
 
+    decision = snapshot.get("decision")
+
+    if is_decision_request(body.question):
+        write_rag_audit(body.application_id, body.question, decision, "refused", [], True)
+        return AnalystAskResponse(
+            status="refused",
+            decision_outcome=decision,
+            explanation=refusal_message(),
+            policy_basis=[],
+            limitations=["the assistant does not make, recommend, or change credit decisions"],
+        )
+
     query = _build_retrieval_query(body.question, snapshot)
     try:
         chunks = retrieve(query, policy_version=snapshot.get("policy_version"))
     except RetrievalUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
-
-    decision = snapshot.get("decision")
 
     if not chunks:
         write_rag_audit(body.application_id, body.question, decision, "refused", [], True)
@@ -44,19 +55,28 @@ async def ask(request: Request, body: AnalystAskRequest, user: dict = Depends(an
         )
 
     client = get_llm_client()
-    raw = client.generate(snapshot, chunks, body.question)
+    try:
+        raw = client.generate(snapshot, chunks, body.question)
+    except Exception:
+        from app.rag.llm_client import FakeLLMClient
+
+        raw = FakeLLMClient().generate(snapshot, chunks, body.question)
+        raw["limitations"] = list(raw.get("limitations") or []) + [
+            "LLM unavailable (rate-limited or error); answered with the offline fallback."
+        ]
     ok, violations = validate_answer(raw, chunks, snapshot)
 
     cited = [b.get("chunk_id") for b in (raw.get("policy_basis") or [])]
     write_rag_audit(body.application_id, body.question, decision, raw.get("status", "answered"), cited, ok)
 
-    if not ok:
+    raw_status = raw.get("status", "answered")
+    if raw_status == "refused" or not ok:
         return AnalystAskResponse(
             status="refused",
             decision_outcome=decision,
-            explanation=refusal_message(),
+            explanation=raw.get("explanation") or refusal_message(),
             policy_basis=[],
-            limitations=violations,
+            limitations=violations or raw.get("limitations") or [],
         )
 
     return AnalystAskResponse(

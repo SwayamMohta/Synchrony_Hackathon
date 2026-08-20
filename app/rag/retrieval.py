@@ -2,10 +2,10 @@ from sqlalchemy import text
 
 from app.db import get_engine
 
-DENSE_TOP = 8
-LEX_TOP = 8
+DENSE_TOP = 12
+LEX_TOP = 12
 RRF_K = 60
-FINAL_TOP = 4
+FINAL_TOP = 6
 
 
 class RetrievalUnavailable(RuntimeError):

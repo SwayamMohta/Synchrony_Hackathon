@@ -20,3 +20,16 @@ export async function submitApplication(payload, token) {
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
+
+export async function askAnalyst(question, applicationId, token) {
+  const res = await fetch("http://localhost:8000/v1/analyst/ask", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+    },
+    body: JSON.stringify({ question, application_id: applicationId }),
+  });
+  if (!res.ok) throw new Error(`Assistant error: ${res.status}`);
+  return res.json();
+}

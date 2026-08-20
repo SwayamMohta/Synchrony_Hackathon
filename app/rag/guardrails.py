@@ -1,3 +1,5 @@
+import re
+
 BANNED_ACTION_WORDS = (
     "override",
     "recalculate",
@@ -7,6 +9,27 @@ BANNED_ACTION_WORDS = (
     "reverse",
     "re-underwrite",
 )
+
+_DECISION_REQUEST_PATTERNS = [
+    r"should (i|we) (approve|decline|refer|accept|reject|deny|grant|override|change)\b",
+    r"\brecommend",
+    r"\boverride",
+    r"\brecalculate",
+    r"\brecompute",
+    r"\breconsider",
+    r"\breverse",
+    r"\bre-underwrite",
+    r"change (the|this) (decision|outcome)",
+    r"would you (approve|decline|refer)",
+    r"can you (approve|decline|refer)",
+]
+
+
+def is_decision_request(question: str) -> bool:
+    """Deterministic check: is the analyst asking the assistant to make or change a
+    decision (rather than explain one)? These are refused before any LLM call."""
+    q = (question or "").lower()
+    return any(re.search(p, q) for p in _DECISION_REQUEST_PATTERNS)
 
 
 def refusal_message() -> str:

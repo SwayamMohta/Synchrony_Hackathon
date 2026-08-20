@@ -123,14 +123,30 @@ def test_fake_llm_grounded():
 def test_get_llm_client_defaults_to_fake(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     assert get_llm_client().name == "fake"
 
 
 def test_get_llm_client_prefers_gemini(monkeypatch):
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
+    monkeypatch.setenv("GEMINI_MODEL_ID", "gemini-3.6-flash")
     client = get_llm_client()
     assert client.base_url == "https://generativelanguage.googleapis.com/v1beta/openai/"
     assert client.model == "gemini-3.6-flash"
+
+
+def test_get_llm_client_generic_provider(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.groq.com/openai/v1")
+    monkeypatch.setenv("LLM_MODEL_ID", "llama-3.3-70b-versatile")
+    client = get_llm_client()
+    assert client.base_url == "https://api.groq.com/openai/v1"
+    assert client.model == "llama-3.3-70b-versatile"
 
 
 def test_decision_snapshot_fallback(monkeypatch, tmp_path):
@@ -180,6 +196,8 @@ def test_ask_endpoint(monkeypatch):
         ],
     )
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
 
     token = create_access_token("analyst", "analyst")
     client = TestClient(app)
@@ -204,3 +222,39 @@ def test_ask_endpoint_requires_auth():
         json={"question": "why?", "application_id": "req-1"},
     )
     assert resp.status_code == 401
+
+
+def test_build_retrieval_query_reasons():
+    from app.api.analyst import _build_retrieval_query
+
+    snap = {"decision": "refer", "reason_codes": ["High fraud score — manual review"]}
+    q = _build_retrieval_query("why referred?", snap)
+    assert "High fraud score — manual review" in q
+
+
+def test_build_retrieval_query_approve():
+    from app.api.analyst import _build_retrieval_query
+
+    snap = {"decision": "approve", "reason_codes": []}
+    q = _build_retrieval_query("why approved?", snap)
+    assert "decision rules, thresholds, and limits" in q
+
+
+def test_extract_version():
+    from app.rag.ingest import _extract_version
+
+    assert _extract_version("**Version:** v1\nbody") == "v1"
+    assert _extract_version("**Policy Version ID:** v3\nbody") == "v3"
+    assert _extract_version("no version here") == "v1"
+
+
+def test_is_decision_request():
+    from app.rag.guardrails import is_decision_request
+
+    assert is_decision_request("should I approve this application?")
+    assert is_decision_request("override this decision")
+    assert is_decision_request("can you recalculate the decision?")
+    assert is_decision_request("what do you recommend?")
+    assert not is_decision_request("why was this application referred?")
+    assert not is_decision_request("what is the minimum age?")
+    assert not is_decision_request("what is the maximum this person can borrow?")

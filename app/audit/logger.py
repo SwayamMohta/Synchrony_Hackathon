@@ -91,6 +91,9 @@ def _normalize_db_row(r: dict) -> dict:
     rc = r.get("reason_codes") or []
     if isinstance(rc, str):
         rc = json.loads(rc)
+    evidence = r.get("evidence") or {}
+    if isinstance(evidence, str):
+        evidence = json.loads(evidence)
     return {
         "decision": r.get("decision"),
         "credit_risk_score": r.get("credit_risk_score"),
@@ -101,9 +104,11 @@ def _normalize_db_row(r: dict) -> dict:
         "feature_schema_version": r.get("feature_schema_version"),
         "request_id": r.get("request_id"),
         "applicant_id": r.get("application_id"),
+        "inputs": evidence.get("inputs") or {},
     }
 
 def _snapshot_from_fallback(e: dict) -> dict:
+    evidence = json.loads(e.get("ev") or "{}")
     return {
         "decision": e.get("dec"),
         "credit_risk_score": e.get("cs"),
@@ -114,6 +119,7 @@ def _snapshot_from_fallback(e: dict) -> dict:
         "feature_schema_version": e.get("fsv"),
         "request_id": e.get("rid"),
         "applicant_id": e.get("aid"),
+        "inputs": evidence.get("inputs") or {},
     }
 
 def get_decision_snapshot(identifier: str):

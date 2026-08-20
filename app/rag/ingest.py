@@ -30,6 +30,13 @@ def _read_document(path):
         return fh.read()
 
 
+def _extract_version(content):
+    m = re.search(r"(?:Policy\s+)?Version(?:\s+ID)?:\s*\**\s*(\S+)", content)
+    if m:
+        return m.group(1).strip()
+    return "v1"
+
+
 def _ensure_schema(conn):
     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     for col, typ in [
@@ -64,7 +71,13 @@ def ingest(conn):
         path = os.path.join(POLICIES_DIR, fname)
         content = _read_document(path)
         policy_id = _slug(os.path.splitext(fname)[0])
-        policy_version = "v1"
+        # Authored internal policy docs carry the decision's policy_version ("v1");
+        # downloaded RBI PDFs are regulatory reference and are tagged separately so
+        # they do not compete with the decision rules during retrieval.
+        if fname.lower().endswith((".md", ".txt")):
+            policy_version = _extract_version(content)
+        else:
+            policy_version = "rbi-2025"
         content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
         conn.execute(

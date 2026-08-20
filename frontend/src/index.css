@@ -11,3 +11,8 @@ button { margin-top: 12px; padding: 8px 16px; background: #f0a500; color: #0d111
 .decision-approve { color: #3fb950; }
 .decision-refer { color: #f0a500; }
 .decision-decline { color: #f85149; }
+.assistant-msg { padding: 10px 12px; border-radius: 6px; margin: 8px 0; }
+.assistant-user { background: #0d1117; border: 1px solid #30363d; }
+.assistant-assistant { background: #1c2128; border: 1px solid #30363d; }
+.citations ul { margin: 4px 0; padding-left: 18px; }
+.citations code { color: #79c0ff; font-size: 0.85em; }

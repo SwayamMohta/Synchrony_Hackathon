@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { submitApplication } from '../api/client.js'
 import DecisionCard from './DecisionCard.jsx'
+import PolicyAssistant from './PolicyAssistant.jsx'
 
 const SCENARIOS = [
   {
@@ -118,6 +119,7 @@ export default function ApplicationForm({ token }) {
       </form>
 
       {result && <DecisionCard key={result.request_id} result={result} />}
+      {result && <PolicyAssistant token={token} applicationId={result.application_id} />}
     </div>
   )
 }
