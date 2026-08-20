@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
     roc_auc_score,
     average_precision_score,
@@ -58,7 +60,10 @@ xgb_train_time = time.perf_counter() - t0
 xgb_proba = model.predict_proba(X_test)[:, 1]
 
 t = time.perf_counter()
-bl = LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42)
+bl = Pipeline([
+    ("scaler", StandardScaler()),
+    ("lr", LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42)),
+])
 bl.fit(X_train, y_train)
 lr_train_time = time.perf_counter() - t
 lr_proba = bl.predict_proba(X_test)[:, 1]
