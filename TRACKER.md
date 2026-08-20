@@ -4,10 +4,10 @@
 Build a real-time, multi-modal credit underwriting engine (PRISM-style) that expands credit access to NTC/thin-file customers using alternative data and behavioral signals, with inline fraud detection and regulatory transparency (explainable decisions, audit trail).
 
 ## Current active task
-RAG policy assistant complete (build + live end-to-end verified + evaluation/QA pass + provider-agnostic LLM). Remaining: user pastes a free LLM key (Gemini or Groq) into `.env`.
+Polish pass complete: `.env.example` fix committed, cross-encoder reranker added, LR baselines scaled (convergence warning cleared), offline integration tests added. 74 tests passing.
 
 ## Status
-in-progress
+done
 
 ## Completed work
 - Problem statement + implementation plan: `docs/problem_Statement.md`, `docs/Plan.md`.
@@ -38,37 +38,46 @@ in-progress
   - Policy corpus: 7 RBI PDFs (tagged `rbi-2025`, regulatory reference) + authored `policies/underwriting-policy-v1.md` (tagged `v1`, maps every engine reason code/threshold; includes debt-ratio formula + affordability wording).
   - Frontend: `PolicyAssistant.jsx` panel + `askAnalyst()` in `client.js`, shown under the decision card.
   - QA pass: 20-question evaluation across approve/refer/decline; fixed LLM-error 500, "max borrow" refusal, debt-ratio gap, decision-request answers; retrieval now surfaces the right chunk for every question type.
-  - `tests/test_rag.py`. Total suite now 63 passing.
-- Committed + pushed to GitHub (`github.com/SwayamMohta/Synchrony_Hackathon`, `main`).
+  - `tests/test_rag.py`.
+- Committed + pushed to GitHub (`github.com/SwayamMohta/Synchrony_Hackathon`, `main`) at `85745c9`.
+- Polish pass (this session, commits `c0b383e`..`0f35ba1`, NOT yet pushed):
+  - `.env.example` Groq model-name corrected to `groq/compound-mini` (`c0b383e`).
+  - Cache-friendly prompt ordering documented in `app/rag/prompts.py` + `app/rag/llm_client.py` (static system prefix, variable question last) for prompt-prefix caching (`dcd764a`).
+  - Cross-encoder reranker (`feat`, `133b322`): new `app/rag/reranker.py` (lazy `sentence_transformers.CrossEncoder`, model `RERANK_MODEL` env, default `cross-encoder/ms-marco-MiniLM-L-6-v2`), wired into `retrieve()` (`RERANK_POOL=24` -> rerank -> `FINAL_TOP=6`), graceful fallback to RRF order when unavailable. +3 tests.
+  - LR baselines scaled (`fix`, `8c986a8`): `ml/train_credit.py` + `ml/train_fraud.py` wrap the LR baseline in `StandardScaler` + `Pipeline`; convergence warning cleared. LR AUC credit 0.8006 -> 0.8021, fraud 0.78 -> 0.8202; XGBoost unchanged (0.8673 / 0.9392).
+  - Integration tests (`test`, `5923382`): new `tests/test_integration.py` (8 tests, offline via JSONL fallback + `FakeLLMClient`): health, login, authorized decision, auth enforcement, RAG ask, audit role enforcement.
+  - Env isolation fix (`test`, `0f35ba1`): `test_rag.py` now deletes `LLM_BASE_URL`/`LLM_MODEL_ID` so the local `.env` LLM config can't leak into tests.
 
 ## In progress
 - None actively.
 
 ## Blockers
-- No LLM key set in `.env` -> `/v1/analyst/ask` uses the offline `FakeLLMClient` (deterministic grounded answers). Set `GEMINI_API_KEY` (free tier: 20 req/day) or the generic `LLM_API_KEY`+`LLM_BASE_URL`+`LLM_MODEL_ID` (e.g. Groq, higher free limits) to use a real LLM.
+- None. LLM configured in `.env` (Groq `groq/compound-mini`; Gemini key also present as fallback).
 - Docker Desktop must be running for RAG retrieval/ingest (pgvector + FTS); audit falls back to JSONL when down. (Verified working when up.)
 - Embedding model (`bge-small-en-v1.5`, ~130 MB) downloads on first ingest.
+- Cross-encoder reranker model (~90 MB) downloads on first live use — NOT yet live-verified (unit-tested with a stub only).
 
 ## Validation and checks
-- `pytest tests/` -> 63 passed (policy, feature builder, fraud, security/roles, edge cases, RAG).
+- `pytest tests/` -> 74 passed (policy, feature builder, fraud, security/roles, edge cases, RAG + reranker, integration).
 - RAG live end-to-end verified (Docker Postgres up, 560 chunks ingested): login -> decision -> ask returns grounded, cited, outcome-matching answers for approve/refer/decline + "max borrow" + "debt ratio".
-- RAG QA evaluation (20 questions): decision-request questions (`should I approve`/`override`/`recommend`) deterministically refused; all factual/threshold questions retrieve the correct chunk; out-of-scope + input-data answers depend on the LLM (Gemini free-tier quota was exhausted during testing).
+- RAG live with real Groq LLM (`groq/compound-mini`): "why referred?" -> cited fraud 0.80 > 0.70 rule; "max borrow?" -> 6x monthly income affordability; "why approved?" -> thresholds; "should I approve?" -> refused (decision-request guard).
+- RAG QA evaluation (20 questions): decision-request questions (`should I approve`/`override`/`recommend`) deterministically refused; all factual/threshold questions retrieve the correct chunk; out-of-scope + input-data answers depend on the LLM.
 - HTTP smoke (TestClient): health 200; login analyst/admin 200; decision no-token 401; decision analyst 200; audit analyst 403; audit admin 200; login 6th/7th -> 429.
-- Credit model: AUC 0.8673, recall 0.816 (Youden 0.44). Fraud model: AUC 0.9392, recall 0.8384 (Youden 0.475).
+- Credit model: AUC 0.8673, recall 0.816 (Youden 0.44); LR baseline AUC 0.8021 (post-scaling). Fraud model: AUC 0.9392, recall 0.8384 (Youden 0.475); LR baseline AUC 0.8202 (post-scaling).
 - Demo scenarios end-to-end: low-risk -> approve (credit 0.294), high-debt -> decline (policy), suspicious -> refer (fraud 0.8).
 - `npm run build` success.
 
 ## Risks or open questions
 - Rate limits use in-memory storage (reset on restart) — fine for demo, not multi-instance production.
-- LR baselines log a convergence warning (max_iter=1000) — acceptable; scaling features would clear it.
 - IEEE-CIS fraud model is transaction fraud, not application fraud — kept as standalone demo; pipeline uses rule-based application fraud (deliberate, per user decision).
-- Free LLM tiers are rate-limited (Gemini 20 req/day); offline `FakeLLMClient` fallback answers generically and does not refuse out-of-scope questions. A factually-wrong threshold in free text is not machine-enforced (mitigated by low temp + grounding + citation guardrails); a cross-encoder reranker is the phase-2 upgrade if retrieval misranks.
+- Free LLM tiers are rate-limited (Gemini 20 req/day); offline `FakeLLMClient` fallback answers generically and does not refuse out-of-scope questions. A factually-wrong threshold in free text is not machine-enforced (mitigated by low temp + grounding + citation guardrails).
+- Cross-encoder reranker is unit-tested but not live-verified against real retrieval (needs Docker + ingest + model download).
 
 ## Next steps
-1. (User) Paste a free LLM key into `.env` (`GEMINI_API_KEY`, or `LLM_API_KEY`+`LLM_BASE_URL`+`LLM_MODEL_ID` for Groq/Cerebras/OpenRouter).
-2. (User) Start Docker Desktop -> `docker compose up -d`; `.venv\Scripts\python -m app.rag.ingest`.
-3. Run the API (`.venv\Scripts\python -m uvicorn app.main:app --reload`) + frontend (`npm run dev` in `frontend/`) and ask the assistant under a decision card.
-4. Optional: cross-encoder reranker; Plaid Sandbox; scale LR features; integration tests.
+1. Push the 6 unpushed commits (`c0b383e`..`0f35ba1`) to GitHub.
+2. Live-verify the cross-encoder reranker: `docker compose up -d` + `.venv\Scripts\python -m app.rag.ingest` (downloads the reranker model), then ask a question and confirm ranking improves.
+3. (User) Run the API (`.venv\Scripts\python -m uvicorn app.main:app --reload`) + frontend (`npm run dev` in `frontend/`) and ask the assistant under a decision card.
+4. Optional (dropped per user): Plaid Sandbox integration.
 
 ## Recommended model path
 - `deepseek-v4-pro` for feature work (RAG); `deepseek-v4-flash` for mechanical edits/tests.
