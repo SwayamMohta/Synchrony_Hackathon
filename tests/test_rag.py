@@ -4,6 +4,7 @@ from app.rag.chunking import chunk_markdown
 from app.rag.guardrails import validate_answer
 from app.rag.llm_client import FakeLLMClient, get_llm_client
 from app.rag.retrieval import reciprocal_rank_fusion
+from app.rag import reranker
 
 SAMPLE = """# Policy
 **Version:** v1
@@ -41,6 +42,38 @@ def test_long_block_split():
     assert len(chunks) > 1
     for c in chunks:
         assert c["chunk_text"].startswith("Document: p.md")
+
+
+def test_rerank_fallback_no_model(monkeypatch):
+    monkeypatch.setattr(reranker, "_load_model", lambda: None)
+    chunks = [
+        {"chunk_id": "p:0000", "chunk_text": "one"},
+        {"chunk_id": "p:0001", "chunk_text": "two"},
+        {"chunk_id": "p:0002", "chunk_text": "three"},
+    ]
+    out = reranker.rerank("question", chunks, top_k=2)
+    assert [c["chunk_id"] for c in out] == ["p:0000", "p:0001"]
+    assert all(c["chunk_id"] in {"p:0000", "p:0001"} for c in out)
+
+
+def test_rerank_reorders_with_stub(monkeypatch):
+    class Stub:
+        def predict(self, pairs):
+            return [9.0 if "fraud" in q[1] else 1.0 for q in pairs]
+
+    monkeypatch.setattr(reranker, "_load_model", lambda: Stub())
+    chunks = [
+        {"chunk_id": "p:0000", "chunk_text": "minimum age is 18"},
+        {"chunk_id": "p:0001", "chunk_text": "fraud above 0.70 is referred"},
+        {"chunk_id": "p:0002", "chunk_text": "expense ratio threshold"},
+    ]
+    out = reranker.rerank("why referred?", chunks, top_k=2)
+    assert out[0]["chunk_id"] == "p:0001"
+
+
+def test_rerank_never_loads_on_import():
+    assert reranker._model is None
+    assert reranker._load_attempted is False
 
 
 def test_rrf_fusion_prefers_both():

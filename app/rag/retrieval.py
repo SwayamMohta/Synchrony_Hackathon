@@ -6,6 +6,7 @@ DENSE_TOP = 12
 LEX_TOP = 12
 RRF_K = 60
 FINAL_TOP = 6
+RERANK_POOL = 24
 
 
 class RetrievalUnavailable(RuntimeError):
@@ -73,4 +74,6 @@ def retrieve(question, policy_version=None):
             lex = _lexical(conn, question, policy_version, LEX_TOP)
     except Exception as exc:
         raise RetrievalUnavailable(f"policy store not reachable: {exc}") from exc
-    return reciprocal_rank_fusion(dense, lex)
+    candidates = reciprocal_rank_fusion(dense, lex, top=RERANK_POOL)
+    from app.rag.reranker import rerank
+    return rerank(question, candidates, FINAL_TOP)
