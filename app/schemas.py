@@ -5,6 +5,11 @@ from datetime import datetime
 class ApplicantInput(BaseModel):
     # Identity (audit + fraud-history key only — does NOT generate any profile)
     applicant_id: str
+    name: Optional[str] = None
+    city: Optional[str] = None
+    occupation: Optional[str] = None
+    employment_length_years: Optional[float] = None
+    credit_history_months: Optional[int] = None
     # About the person
     age: int = Field(ge=18, le=120)
     dependents: int = Field(ge=0, default=0)
@@ -43,6 +48,8 @@ class DecisionResult(BaseModel):
     request_id: str
     latency_ms: float
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    fraud_signals: Optional[dict] = None
+    profile: Optional[dict] = None
 
 class LoginRequest(BaseModel):
     username: str
@@ -55,7 +62,7 @@ class TokenResponse(BaseModel):
 
 class AnalystAskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=500)
-    application_id: str
+    application_id: Optional[str] = None
 
 class PolicyBasisItem(BaseModel):
     chunk_id: str

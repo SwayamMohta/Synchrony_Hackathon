@@ -9,6 +9,7 @@ class FakeLLMClient:
     name = "fake"
 
     def generate(self, decision_snapshot, chunks, question):
+        decision_snapshot = decision_snapshot or {}
         outcome = decision_snapshot.get("decision")
         reasons = decision_snapshot.get("reason_codes") or []
         reason_text = "; ".join(reasons) if reasons else "no adverse reason codes were recorded"

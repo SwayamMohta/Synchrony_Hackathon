@@ -4,79 +4,59 @@
 Build a real-time, multi-modal credit underwriting engine (PRISM-style) that expands credit access to NTC/thin-file customers using alternative data and behavioral signals, with inline fraud detection and regulatory transparency (explainable decisions, audit trail).
 
 ## Current active task
-Polish pass complete: `.env.example` fix committed, cross-encoder reranker added, LR baselines scaled (convergence warning cleared), offline integration tests added. 74 tests passing.
+Final UX/data-integrity polish pass (all LOCAL ONLY, nothing pushed since `85745c9`): deterministic applicant names, DB-backed display profile (no fabricated frontend fields), chat persistence fix, rotating loading statuses, audit button removed from Decision page. 83 backend tests passing, `npm run build` clean.
 
 ## Status
-done
+in-progress
 
 ## Completed work
 - Problem statement + implementation plan: `docs/problem_Statement.md`, `docs/Plan.md`.
 - Full Must-Have build: React + FastAPI + PostgreSQL(+pgvector) + XGBoost credit model + rule-based fraud + SHAP + deterministic policy + audit (JSONL fallback) + JWT auth.
 - Decisioning refactor (all financial data explicit/controlled): `app/schemas.py` (16-field `ApplicantInput`), `app/features/builder.py`, `app/features/fraud_signals.py`, `app/rules/policy_engine.py`, `app/decisioning/pipeline.py`, `app/api/decision.py`. Deleted `app/data/bureau_mock.py` / `cashflow_mock.py`.
-- 4 final decisioning corrections:
-  1. `DebtRatio` matches GMSC Data Dictionary: `(monthly_debt_payments + avg_monthly_expenses) / (annual_income/12)`.
-  2. Affordability REFER check moved before credit thresholds in `pipeline.py::_decide`.
-  3. High-debt demo scenario confirmed >65% expense-to-income (0.84) -> deterministic DECLINE.
-  4. Fraud output relabeled "Rule-based fraud risk score" (`DecisionCard.jsx`, `docs/ModelPlan.md`).
-- Credit model improved (`ml/train_credit.py`): `scale_pos_weight` + `class_weight="balanced"` + Youden threshold. Recall 0.199 -> 0.816; AUC 0.8673 vs LR baseline 0.8006. Artifacts + `ml/data/credit_metrics.json`.
-- Fraud ML model trained (standalone demo) `ml/train_fraud.py` on IEEE-CIS: XGBoost AUC 0.9392 vs LR 0.78, PR-AUC 0.6361, recall 0.8384. Artifacts: `app/models/artifacts/fraud_risk_v1.json`, `ml/data/fraud_holdout_predictions.pkl`, `ml/data/fraud_metrics.json`. Pipeline stays rule-based.
-- Security hardening:
-  - Role enforcement: `require_role(*roles)`; `analyst` = analyst+admin, `admin` = admin only. `/v1/decision` -> `Depends(analyst)`; new admin-only `GET /v1/audit/logs` (`app/api/audit.py`, `read_audit_log` in `app/audit/logger.py`).
-  - Rate limiting: `slowapi==0.1.9` wired in `app/main.py` via `app/rate_limit.py`; `/auth/login` 5/min, `/v1/decision` 30/min.
-  - Pydantic `model_` namespace warning fixed (`ConfigDict(protected_namespaces=())` in `DecisionResult`).
-- Edge-case hardening (`tests/test_edge_cases.py`, 27 new tests):
-  - Policy boundaries (expense ratio at/below 65%, delinquency 3 vs 4, affordability exactly 6x), builder zero-income / DebtRatio>1 / utilization>1, fraud None/empty identity, `_decide` ordering, JWT expired/missing-role, schema negatives, audit read.
-  - 2 bugs fixed: (1) JWT missing `role` claim -> 500 KeyError, now 401 (`app/auth/security.py`); (2) empty-string device/IP recorded into fraud history, now skipped (`app/features/fraud_signals.py`).
-- Frontend: full input form + 3 demo scenarios + decision card (SHAP chart) in `frontend/src/components/`.
-- RAG policy assistant built (read-only explanation service):
-  - Architecture (Perplexity plan, adapted to India): PostgreSQL + pgvector, BAAI/bge-small-en-v1.5 embeddings, section-aware chunking, hybrid retrieval (dense cosine + Postgres FTS via `websearch_to_tsquery`) fused with Reciprocal Rank Fusion, free cloud LLM with deterministic server-side guardrails.
-  - `app/rag/` modules: `chunking.py`, `embeddings.py`, `retrieval.py`, `guardrails.py`, `prompts.py`, `llm_client.py`, `ingest.py`.
-  - Provider-agnostic `get_llm_client()`: any OpenAI-compatible free LLM via `LLM_API_KEY`/`LLM_BASE_URL`/`LLM_MODEL_ID` (or `GEMINI_*`). OpenAI removed. Offline `FakeLLMClient` fallback when no key / on LLM error.
-  - `POST /v1/analyst/ask` (`app/api/analyst.py`, analyst-only, 30/min) — reads immutable decision snapshot (incl. recorded inputs), deterministic decision-request refusal (`should I approve`/`override`/`recommend`), retrieval filtered by `policy_version`, grounding gate, server-side validation (outcome==snapshot, citations in retrieved set, banned words), persists `rag_audit`.
-  - `audit/logger.py`: `get_decision_snapshot()` (Postgres + JSONL fallback, resolves request_id/applicant_id, returns `inputs`) and `write_rag_audit()`.
-  - Schema: `db/schema.sql` extended (`policy_embeddings` + chunk_id/section_path/rule_id/embedding_model/chunker_version/policy_version/content_tsv + GIN index; `policies` + content_hash; `rag_audit`). Ingest runs idempotent `_ensure_schema`.
-  - Policy corpus: 7 RBI PDFs (tagged `rbi-2025`, regulatory reference) + authored `policies/underwriting-policy-v1.md` (tagged `v1`, maps every engine reason code/threshold; includes debt-ratio formula + affordability wording).
-  - Frontend: `PolicyAssistant.jsx` panel + `askAnalyst()` in `client.js`, shown under the decision card.
-  - QA pass: 20-question evaluation across approve/refer/decline; fixed LLM-error 500, "max borrow" refusal, debt-ratio gap, decision-request answers; retrieval now surfaces the right chunk for every question type.
-  - `tests/test_rag.py`.
-- Committed + pushed to GitHub (`github.com/SwayamMohta/Synchrony_Hackathon`, `main`) at `85745c9`.
-- Polish pass (this session, commits `c0b383e`..`0f35ba1`, NOT yet pushed):
-  - `.env.example` Groq model-name corrected to `groq/compound-mini` (`c0b383e`).
-  - Cache-friendly prompt ordering documented in `app/rag/prompts.py` + `app/rag/llm_client.py` (static system prefix, variable question last) for prompt-prefix caching (`dcd764a`).
-  - Cross-encoder reranker (`feat`, `133b322`): new `app/rag/reranker.py` (lazy `sentence_transformers.CrossEncoder`, model `RERANK_MODEL` env, default `cross-encoder/ms-marco-MiniLM-L-6-v2`), wired into `retrieve()` (`RERANK_POOL=24` -> rerank -> `FINAL_TOP=6`), graceful fallback to RRF order when unavailable. +3 tests.
-  - LR baselines scaled (`fix`, `8c986a8`): `ml/train_credit.py` + `ml/train_fraud.py` wrap the LR baseline in `StandardScaler` + `Pipeline`; convergence warning cleared. LR AUC credit 0.8006 -> 0.8021, fraud 0.78 -> 0.8202; XGBoost unchanged (0.8673 / 0.9392).
-  - Integration tests (`test`, `5923382`): new `tests/test_integration.py` (8 tests, offline via JSONL fallback + `FakeLLMClient`): health, login, authorized decision, auth enforcement, RAG ask, audit role enforcement.
-  - Env isolation fix (`test`, `0f35ba1`): `test_rag.py` now deletes `LLM_BASE_URL`/`LLM_MODEL_ID` so the local `.env` LLM config can't leak into tests.
+- 4 final decisioning corrections (DebtRatio formula, affordability REFER before credit thresholds, high-debt 0.84 expense ratio, "Rule-based fraud risk score" label).
+- Credit model improved (`ml/train_credit.py`): scale_pos_weight + balanced LR + Youden threshold. Recall 0.199 -> 0.816; AUC 0.8673.
+- Fraud ML model trained (standalone demo) `ml/train_fraud.py` on IEEE-CIS: XGBoost AUC 0.9392, recall 0.8384. Pipeline stays rule-based.
+- Security hardening: `require_role(*roles)`, admin-only `GET /v1/audit/logs`, slowapi rate limiting (login 5/min, decision 30/min). `app/rate_limit.py`, `app/api/audit.py`.
+- Edge-case hardening (`tests/test_edge_cases.py`, 27 tests): JWT missing-role 500 -> 401, empty-string device/IP skipped.
+- RAG policy assistant (read-only): `app/rag/` (chunking, bge-small-en-v1.5 embeddings, dense+FTS+RRF retrieval, cross-encoder reranker, guardrails, prompts, provider-agnostic llm_client, ingest), `POST /v1/analyst/ask`, `get_decision_snapshot`/`write_rag_audit`, schema migration, 7 RBI PDFs + authored `policies/underwriting-policy-v1.md`, `PolicyAssistant.jsx` panel, `tests/test_rag.py`. Live verified + 20-question QA pass.
+- Polish pass: cache-friendly prompt ordering, scaled LR baselines (convergence warning cleared), offline integration tests, env-isolation fix. Suite at 74.
+- "Frontend syn" React+TS+Tailwind app became main frontend, wired end-to-end (no mock data): `GET /v1/applications`, `GET /v1/applications/{id}`, `GET /v1/metrics/model-eval`; `ApplicantInput` extended (name/city/occupation/employment_length_years/credit_history_months); audit snapshot exposes `fraud_signals` + `shap_top_features` + `application_id`; `/v1/analyst/ask` optional `application_id`. `Frontend syn/src/services/api.ts` mapper + real loaders; `src/mock/` deleted; PolicyAssistant seed stripped.
+- UI polish: deterministic applicant names, compact affordability section, Full Underwriting Inspection 70/30 layout + context rail, SHAP separated from reason codes, CORS comma-separated origins.
+- UX/data-integrity polish (THIS SESSION, all uncommitted):
+  - Deterministic applicant names: `mapSnapshotToApplicationCase` (`Frontend syn/src/services/api.ts`) falls back to a 10-name fictional Indian list hashed on `application_id`/`request_id`/`applicant_id` when `inputs.name` is absent — replaces old test labels (`live2`, `e-refer`, `eval-approve`, `app-rag-demo2`) surfaced from legacy `applicant_id` values.
+  - DB single-source-of-truth for display fields: new `app/decisioning/profile.py::build_profile()` computes only REAL derived fields (segment, risk_band, fraud_level, dti, income_stability, expense_profile, behavioral_signals, bank_cashflow_surplus); stored in audit `evidence["profile"]` at decision time (`pipeline.py`); exposed + backfilled for legacy rows in `app/audit/logger.py` (`_ensure_profile`). Frontend `DecisionSnapshot.profile` typed; mapper reads `s.profile`. REMOVED fabricated fields: per-case `baselineScore` (was credit*1.1), `avgAccountBalance` (income*1.2), `upiTransactionConsistency` placeholder. ThinFilePanel now a 3-tile strip.
+  - Chat persistence fix (`PolicyAssistant.tsx::handleSend`): user message + session are saved optimistically BEFORE the API call, so chats always appear in Recents and survive new-chat/reload even when backend/Docker/LLM is down (previously only saved after a successful response, so failures lost the chat); assistant error bubble appended on failure.
+  - Rotating status messages: new `Frontend syn/src/hooks/useRotatingStatus.ts`; Decision run button (`DecisionEngineView.tsx`) cycles "Pondering…/Musing…/Crunching the numbers…/Consulting the policy manual…/Weighing the risk…"; PolicyAssistant bubble cycles its own phrases.
+  - Admin Audit Log button + `AuditLogTable.tsx` removed from Decision Engine page (kept reachable via Analytics → Audit tab and admin-only `GET /v1/audit/logs`).
+- Tests: `tests/test_applications.py` +4 (profile present/correct, THIN-FILE vs ESTABLISHED, legacy-row backfill). 83 passing.
 
 ## In progress
-- None actively.
+- None actively (work is local-only; push pending).
 
 ## Blockers
-- None. LLM configured in `.env` (Groq `groq/compound-mini`; Gemini key also present as fallback).
-- Docker Desktop must be running for RAG retrieval/ingest (pgvector + FTS); audit falls back to JSONL when down. (Verified working when up.)
-- Embedding model (`bge-small-en-v1.5`, ~130 MB) downloads on first ingest.
-- Cross-encoder reranker model (~90 MB) downloads on first live use — NOT yet live-verified (unit-tested with a stub only).
+- None. LLM configured in `.env` (Groq `groq/compound-mini`; Gemini key fallback).
+- Docker Desktop must be running for RAG retrieval/ingest (pgvector + FTS); audit falls back to JSONL when down.
+- Embedding model (`bge-small-en-v1.5`, ~130 MB) and cross-encoder reranker (~90 MB) download on first use.
+- ENTIRE `Frontend syn/` folder is untracked + this session's backend changes are uncommitted — everything since `85745c9` is LOCAL ONLY.
 
 ## Validation and checks
-- `pytest tests/` -> 74 passed (policy, feature builder, fraud, security/roles, edge cases, RAG + reranker, integration).
-- RAG live end-to-end verified (Docker Postgres up, 560 chunks ingested): login -> decision -> ask returns grounded, cited, outcome-matching answers for approve/refer/decline + "max borrow" + "debt ratio".
-- RAG live with real Groq LLM (`groq/compound-mini`): "why referred?" -> cited fraud 0.80 > 0.70 rule; "max borrow?" -> 6x monthly income affordability; "why approved?" -> thresholds; "should I approve?" -> refused (decision-request guard).
-- RAG QA evaluation (20 questions): decision-request questions (`should I approve`/`override`/`recommend`) deterministically refused; all factual/threshold questions retrieve the correct chunk; out-of-scope + input-data answers depend on the LLM.
-- HTTP smoke (TestClient): health 200; login analyst/admin 200; decision no-token 401; decision analyst 200; audit analyst 403; audit admin 200; login 6th/7th -> 429.
-- Credit model: AUC 0.8673, recall 0.816 (Youden 0.44); LR baseline AUC 0.8021 (post-scaling). Fraud model: AUC 0.9392, recall 0.8384 (Youden 0.475); LR baseline AUC 0.8202 (post-scaling).
-- Demo scenarios end-to-end: low-risk -> approve (credit 0.294), high-debt -> decline (policy), suspicious -> refer (fraud 0.8).
-- `npm run build` success.
+- `pytest tests/` -> 83 passed (policy, feature builder, fraud, security/roles, edge cases, RAG + reranker, integration, applications incl. profile tests).
+- `npm run build` (Frontend syn) clean (only chunk-size warning); bundle dropped ~5KB after AuditLogTable removal.
+- Deterministic-name mapping verified: `live2`->Rohan Kapoor, `e-refer`->Rohan Kapoor, `eval-approve`->Aarav Mehta, `app-rag-demo2`->Dev Patel (stable hash).
+- Legacy-row backfill verified by test (`_normalize_db_row` on a row without `evidence.profile` recomputes a correct profile).
+- Earlier validations still hold: RAG live end-to-end (Groq), 20-question QA, HTTP smoke, credit AUC 0.8673 / recall 0.816, fraud AUC 0.9392 / recall 0.8384, 22/22 flow check.
 
 ## Risks or open questions
-- Rate limits use in-memory storage (reset on restart) — fine for demo, not multi-instance production.
-- IEEE-CIS fraud model is transaction fraud, not application fraud — kept as standalone demo; pipeline uses rule-based application fraud (deliberate, per user decision).
-- Free LLM tiers are rate-limited (Gemini 20 req/day); offline `FakeLLMClient` fallback answers generically and does not refuse out-of-scope questions. A factually-wrong threshold in free text is not machine-enforced (mitigated by low temp + grounding + citation guardrails).
-- Cross-encoder reranker is unit-tested but not live-verified against real retrieval (needs Docker + ingest + model download).
+- Rate limits are in-memory (reset on restart) — fine for demo, not multi-instance production.
+- IEEE-CIS fraud model is transaction fraud, not application fraud — kept as standalone demo; pipeline uses rule-based application fraud.
+- Free LLM tiers are rate-limited; offline `FakeLLMClient` fallback answers generically. Factually-wrong thresholds in free text not machine-enforced (mitigated by grounding + citation guardrails).
+- Legacy rows display derived profiles via read-time backfill (no DB migration needed) — deterministic per snapshot, but recomputed not stored.
+- `Frontend syn/` is still entirely untracked; committing it is a large add (needs review of any secrets — none expected).
 
 ## Next steps
-1. Push the 6 unpushed commits (`c0b383e`..`0f35ba1`) to GitHub.
-2. Live-verify the cross-encoder reranker: `docker compose up -d` + `.venv\Scripts\python -m app.rag.ingest` (downloads the reranker model), then ask a question and confirm ranking improves.
-3. (User) Run the API (`.venv\Scripts\python -m uvicorn app.main:app --reload`) + frontend (`npm run dev` in `frontend/`) and ask the assistant under a decision card.
+1. Commit this session's work (new `Frontend syn/` + profile/chat/UI changes) and push all local commits since `85745c9`.
+2. (User) Run API (`.venv\Scripts\python -m uvicorn app.main:app --reload`) + frontend (`npm run dev` in `Frontend syn/`) and walk the full workspace.
+3. Optional: delete legacy `frontend/` folder + dead `FraudInvestigation.tsx`/`PendingCasesWidget.tsx`.
 4. Optional (dropped per user): Plaid Sandbox integration.
 
 ## Recommended model path

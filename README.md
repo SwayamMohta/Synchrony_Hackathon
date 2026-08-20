@@ -1,44 +1,224 @@
-# Credit Underwriting Engine (PRISM-style)
+# PRISM - Underwriting Intelligence
 
-A real-time, multi-modal credit underwriting engine that expands credit access to new-to-credit (NTC) and thin-file customers using alternative data and behavioral signals, with inline fraud detection and explainable, auditable decisions.
+PRISM is a prototype underwriting intelligence system for retail credit. It combines
+credit-risk analysis, rule-based policy evaluation, fraud signals, and explainability so
+that an analyst can understand why a given application was approved, referred, or declined.
 
-## How it works
+The system is a working **prototype / demo**. It is not production lending infrastructure.
+Bureau, cash-flow, and fraud inputs are simulated, and all numeric thresholds are demo values
+used to illustrate the decision mechanics.
 
-1. A credit application is submitted with applicant info plus device/IP behavioral signals.
-2. The engine assembles bureau-style features (mock), synthetic cash-flow, and deterministic fraud signals (velocity / identity consistency).
-3. A canonical feature builder maps bureau + applicant data onto the **10 real Give Me Some Credit features** (the exact training columns).
-4. An **XGBoost** credit model (with a Logistic Regression baseline) scores probability of default.
-5. A **rule-based fraud score** and a **deterministic policy engine** (hard guardrails) contribute to the final decision — ML cannot override policy. (A standalone **XGBoost fraud model** trained on the IEEE-CIS dataset — AUC 0.9392 — is also delivered as a demonstration; see "Model evaluation".)
-6. **SHAP** produces per-decision feature attribution mapped to adverse-action **reason codes**.
-7. Every decision is written to an **append-only audit log** (PostgreSQL, with a JSONL fallback when the DB is down).
+## Problem Statement
 
-The decision is deterministic and explainable; there is no LLM in the decision path. (A policy Q&A assistant over pgvector + OpenAI is planned but deferred pending an API key.)
+Traditional credit underwriting often depends on a long credit history. That creates
+challenges for **New-to-Credit (NTC)** and **thin-file** applicants, who have little or no
+history on file and can therefore be underserved.
+
+Evaluating such applicants well requires alternative and contextual signals beyond the
+traditional credit report, and doing so introduces its own risks and obligations:
+
+- **Fraud risk** must be detected alongside thin credit data, since applicants with little
+  history are harder to verify.
+- **Transparent decisions** are required so an underwriter can see exactly which rule or
+  score drove the outcome.
+- **Explainability and auditability** are needed so every decision can be reconstructed and
+  explained, including to the applicant.
+
+## Solution
+
+PRISM implements a deterministic, explainable decision workflow. There is no language model
+in the decision path; the outcome is produced by explicit, versioned rules and a credit-risk
+model, and every step is recorded.
+
+```
+Application
+    |
+Feature Construction
+    |
+Credit Risk Analysis
+    |
+Fraud Checks
+    |
+Policy Rules
+    |
+Final Decision
+    |
+Explainability / Audit
+```
+
+Each application can produce one of three outcomes:
+
+- **APPROVE** - the application meets all policy and risk criteria.
+- **REFER** - the application needs manual underwriting review (for example, elevated fraud
+  score, or a requested amount that is large relative to income).
+- **DECLINE** - a hard policy rule was broken, or the predicted credit risk is too high.
+
+## Key Features
+
+- **Application management** - submit an application with applicant details plus
+  device/IP behavioral signals; list and inspect past applications.
+- **Credit-risk scoring** - an XGBoost model (with a logistic-regression baseline) scores
+  predicted default risk on the canonical feature set.
+- **Rule-based fraud detection** - a deterministic fraud score from application-velocity
+  and identity-consistency signals.
+- **Policy-rule evaluation** - a deterministic policy engine applies hard guardrails
+  (minimum age, expense-to-income ratio, severe delinquency) that a model cannot override.
+- **SHAP / model explainability** - per-decision feature attribution for the credit model,
+  kept separate from policy reason codes.
+- **Decision reason codes** - plain-English adverse-action reasons attached to every
+  non-approve decision.
+- **Underwriting inspection workspace** - a full analyst frontend with an applications hub,
+  a 360-degree case dossier, and a decision engine.
+- **Policy Assistant / RAG** - a read-only assistant that answers analyst questions over
+  the policy corpus with grounded citations.
+- **Audit trail** - every decision and RAG question is written to an append-only log
+  (PostgreSQL, with a JSONL fallback).
+- **Model evaluation** - a metrics endpoint and offline scripts report AUC, precision,
+  recall, and related scores for the trained models.
+- **Thin-file applicant scenarios** - the workspace surfaces derived applicant profiles
+  (segment, risk band, income stability, and similar) for cases with limited history.
 
 ## Architecture
 
-- **Backend**: FastAPI + Pydantic v2, JWT auth, SQLAlchemy
-- **Models**: XGBoost (credit) + rule-based fraud; SHAP for explainability
-- **Storage**: PostgreSQL + pgvector
-- **Frontend**: React + Vite + Recharts
-- **Data**: Give Me Some Credit `cs-training.csv` (real, 150k rows)
+```mermaid
+flowchart LR
+  subgraph Frontend["React frontend (Frontend syn)"]
+    UI[Analyst workspace\nDecision engine, cases, analytics, policy assistant]
+  end
+  subgraph Backend["FastAPI backend"]
+    API[API layer\n/auth, /v1/decision, /v1/applications,\n/v1/audit, /v1/metrics, /v1/analyst]
+    PIP[Decision engine]
+    RAG[Policy Assistant / RAG]
+  end
+  subgraph Models["Models"]
+    XGB[XGBoost credit model]
+    FRAUD[Rule-based fraud score]
+    SHAP[SHAP explainer]
+  end
+  subgraph DB["PostgreSQL + pgvector"]
+    AUDIT[audit_logs, rag_audit]
+    POL[policy_embeddings, policies]
+  end
 
-## Prerequisites
+  UI -->|JWT| API
+  API --> PIP
+  PIP --> XGB
+  PIP --> FRAUD
+  PIP --> SHAP
+  PIP -->|decision + evidence| AUDIT
+  API --> RAG
+  RAG -->|embeddings + retrieval| POL
+  RAG -->|question audit| AUDIT
+```
+
+### Frontend
+
+A React 19 + TypeScript + Vite + Tailwind single-page app in `Frontend syn/`. It provides an
+analyst workspace: applications hub, decision engine, 360-degree case dossier, policy
+assistant, analytics, and authentication. It talks to the backend over a typed API client and
+renders real decision snapshots (no mock data).
+
+### Backend
+
+A FastAPI service in `app/` exposing REST endpoints for authentication, decisioning,
+applications, audit, metrics, and the RAG analyst endpoint. It uses Pydantic v2 schemas,
+JWT auth with role enforcement, and slowapi rate limiting. OpenAPI docs are available at
+`/docs`.
+
+### Decision Engine
+
+In `app/decisioning/` it orchestrates feature construction, credit scoring, fraud scoring,
+policy evaluation, and the final approve/refer/decline decision, then assembles the
+explanation and audit record.
+
+### ML / Explainability
+
+In `app/models/` and `app/explain/`. The credit model is an XGBoost classifier trained on
+the Give Me Some Credit dataset. Fraud in the live pipeline is rule-based. SHAP produces
+per-decision feature attribution. A standalone XGBoost fraud model (IEEE-CIS) is included as
+a demonstration only.
+
+### Database
+
+PostgreSQL with the pgvector extension (see `docker-compose.yml` and `db/schema.sql`).
+It stores applications, features, decisions, the audit trail, and the policy corpus with
+vector embeddings and full-text search indexes. When the database is unavailable, the audit
+layer falls back to local JSONL files.
+
+### RAG / Policy Assistant
+
+In `app/rag/`. Policy documents (an authored underwriting policy plus seven RBI regulatory
+PDFs) are chunked, embedded with `bge-small-en-v1.5`, and stored in pgvector. At query time
+the system performs dense + full-text retrieval with reciprocal-rank fusion, re-ranks with a
+cross-encoder, and answers via a provider-agnostic LLM client with grounding and guardrails.
+It is read-only and never changes a decision.
+
+## Decision Flow
+
+```mermaid
+flowchart TD
+  A[Application] --> B[Feature Construction]
+  B --> C[Credit Risk Model]
+  B --> D[Fraud Signals]
+  D --> E[Rule-based Fraud Score]
+  C --> F[Policy Engine + Affordability]
+  E --> F
+  F --> G{Decision}
+  G -->|Approve| H[Approve]
+  G -->|Refer| I[Refer for review]
+  G -->|Decline| J[Decline]
+  H --> K[SHAP + Reason Codes + Audit]
+  I --> K
+  J --> K
+```
+
+The decision is deterministic: any broken hard policy rule declines the application; a high
+fraud score or an affordability concern refers it for review; otherwise the credit-risk score
+determines the outcome. Every outcome is explained with SHAP attribution and policy reason
+codes and written to the audit log.
+
+## API Endpoints
+
+| Method | Path | Description | Access |
+|--------|------|-------------|--------|
+| GET | `/health` | Liveness check | Public |
+| POST | `/auth/login` | Issue a JWT | Public (rate-limited 5/min) |
+| POST | `/v1/decision` | Run the decision pipeline | Analyst / Admin |
+| GET | `/v1/applications` | List applications | Analyst / Admin |
+| GET | `/v1/applications/{id}` | Application detail snapshot | Analyst / Admin |
+| GET | `/v1/metrics/model-eval` | Model evaluation metrics | Analyst / Admin |
+| POST | `/v1/analyst/ask` | Ask the policy assistant (RAG) | Analyst / Admin |
+| GET | `/v1/audit/logs` | Read the audit trail | Admin only |
+
+## Authentication and Roles
+
+Two seeded demo users exist:
+
+| Username | Password | Role |
+|----------|----------|------|
+| `analyst` | `analyst123` | Analyst |
+| `admin` | `admin123` | Admin |
+
+Most decisioning and read endpoints accept analyst or admin. Reading the audit trail is
+admin-only.
+
+## Getting Started
+
+### Prerequisites
 
 - Python 3.10+
 - Node 18+ / npm
 - Docker Desktop (for PostgreSQL + pgvector)
 
-## Setup
+### 1. Database (optional for the demo; audit falls back to JSONL)
 
-### 1. Database (optional for the demo; audit falls back to a local JSONL file)
-
-```
+```bash
 docker compose up -d
 ```
 
 ### 2. Backend
 
-```
+```bash
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
@@ -46,65 +226,95 @@ pip install -r requirements.txt
 
 ### 3. Train the credit model
 
-```
+```bash
 .venv\Scripts\python.exe ml\train_credit.py
 ```
 
-Produces `app/models/artifacts/credit_risk_v1.json`, `app/models/artifacts/credit_baseline_v1.pkl`, `ml/feature_metadata.json`, `ml/data/holdout_predictions.pkl`.
+This writes the model artifacts under `app/models/artifacts/` and `ml/feature_metadata.json`.
 
-### 3b. Train the fraud model (optional, standalone demo)
+### 3b. Train the fraud demo model (optional, standalone)
 
-Requires the IEEE-CIS fraud files (`train_transaction.csv`, `train_identity.csv`) in `ieee-fraud-detection/`.
+Requires the IEEE-CIS files in `ieee-fraud-detection/`:
 
-```
+```bash
 .venv\Scripts\python.exe ml\train_fraud.py
 ```
 
-Produces `app/models/artifacts/fraud_risk_v1.json`, `ml/data/fraud_holdout_predictions.pkl`, `ml/data/fraud_metrics.json`. The decision pipeline stays rule-based; this model is a demonstration of ML fraud detection.
+The live pipeline stays rule-based; this is a demonstration of ML fraud detection.
 
 ### 4. Run the API
 
-```
+```bash
 .venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
 
-Interactive docs at http://localhost:8000/docs.
+Interactive docs: http://localhost:8000/docs
 
-### 5. Frontend
+### 5. Run the frontend
 
-```
-cd frontend
+```bash
+cd "Frontend syn"
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173. Demo users: `analyst` / `analyst123`, `admin` / `admin123`.
+Open http://localhost:5173 and log in with one of the demo users.
 
-Role-based access: `/v1/decision` requires an analyst or admin role; `GET /v1/audit/logs` is admin-only. Rate limits: `/auth/login` 5/min, `/v1/decision` 30/min.
+## RAG / Policy Assistant Setup
 
-## Model evaluation
+The policy assistant retrieves over the policy corpus stored in pgvector. With Docker
+running, ingest the policy documents so the embeddings are populated:
 
-Credit model (AUC uplift over logistic-regression baseline):
-
+```bash
+.venv\Scripts\python.exe -m app.rag.ingest
 ```
+
+Set the LLM configuration in `.env` (see `.env.example`): `LLM_API_KEY`, `LLM_BASE_URL`,
+and `LLM_MODEL_ID`. The system is provider-agnostic and defaults to Groq
+(`groq/compound-mini`). If no key is present, the assistant falls back to an offline,
+grounded answer. The embedding and reranker models download on first use.
+
+## Model Evaluation
+
+```bash
 .venv\Scripts\python.exe ml\evaluate.py
 ```
 
-Credit: XGBoost AUC 0.8673 vs LR baseline 0.8006, recall 0.816 at the Youden threshold (class-weight + threshold tuning) — see `ml/data/credit_metrics.json`.
+Current reported results (see `ml/data/`):
 
-Fraud model (IEEE-CIS, standalone): XGBoost AUC 0.9392 vs LR baseline 0.78, PR-AUC 0.6361 — see `ml/data/fraud_metrics.json`.
+- Credit model: XGBoost AUC ~0.87 versus a logistic-regression baseline ~0.80, with improved
+  recall at the decision threshold.
+- Fraud model (IEEE-CIS, standalone demo): XGBoost AUC ~0.94.
 
 ## Tests
 
-```
+```bash
 .venv\Scripts\python.exe -m pytest tests/ -v
 ```
 
-## Known limitations
+The suite covers the policy engine, feature builder, fraud signals, decision pipeline,
+security and roles, RAG and reranking, edge cases, and application endpoints.
 
-- Bureau, cash-flow, and fraud signals are synthetic/mocked (deterministic by applicant ID).
-- `cs-test.csv` has no labels (Kaggle withheld them), so held-out evaluation uses a stratified split of `cs-training.csv`.
-- Audit logging falls back to `ml/audit_fallback.jsonl` when PostgreSQL is unavailable.
-- RAG policy assistant is deferred (requires an OpenAI API key).
-- Plaid Sandbox is planned but not yet wired.
-- Demo only — not production lending infrastructure.
+## Known Limitations
+
+- Bureau, cash-flow, and fraud inputs are simulated and deterministic by applicant ID.
+- The credit dataset's test split has no labels, so held-out evaluation uses a stratified
+  split of the training data.
+- The audit trail falls back to local JSONL files when PostgreSQL is unavailable.
+- The RAG assistant uses a configurable free LLM tier, which can be rate-limited; it then
+  falls back to an offline grounded answer.
+- The IEEE-CIS fraud model is a standalone demonstration and is not used in the live
+  decision pipeline.
+- This is a demo prototype, not production lending infrastructure.
+
+## Project Layout
+
+```
+app/                FastAPI backend (API, decision engine, RAG, models)
+ml/                 Model training and evaluation scripts
+policies/           Policy corpus (authored markdown + RBI PDFs)
+db/                 SQL schema
+tests/              Backend test suite
+Frontend syn/       Main React analyst workspace
+docs/               Design and planning documents
+```

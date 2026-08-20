@@ -36,9 +36,10 @@ def build_user_prompt(question, decision_snapshot, chunks):
     No timestamps, ids, or other volatile text are injected, and iteration
     order is fixed, so identical inputs produce a byte-identical prompt.
     """
+    decision_snapshot = decision_snapshot or {}
     lines = []
     lines.append("Recorded decision facts:")
-    lines.append(f"- outcome: {decision_snapshot.get('decision')}")
+    lines.append(f"- outcome: {decision_snapshot.get('decision') or '(none — general policy question)'}")
     reasons = decision_snapshot.get("reason_codes") or []
     lines.append(f"- reason codes: {', '.join(reasons) if reasons else '(none)'}")
     lines.append(f"- credit risk score: {decision_snapshot.get('credit_risk_score')}")

@@ -12,6 +12,8 @@ router = APIRouter()
 
 
 def _build_retrieval_query(question, snapshot):
+    if not snapshot:
+        return question
     decision = snapshot.get("decision")
     reasons = snapshot.get("reason_codes") or []
     if reasons:
@@ -22,14 +24,14 @@ def _build_retrieval_query(question, snapshot):
 @router.post("/v1/analyst/ask", response_model=AnalystAskResponse)
 @limiter.limit("30/minute")
 async def ask(request: Request, body: AnalystAskRequest, user: dict = Depends(analyst)):
-    snapshot = get_decision_snapshot(body.application_id)
-    if snapshot is None:
+    snapshot = get_decision_snapshot(body.application_id) if body.application_id else None
+    if body.application_id and snapshot is None:
         raise HTTPException(status_code=404, detail="Decision not found for application")
 
-    decision = snapshot.get("decision")
+    decision = snapshot.get("decision") if snapshot else None
 
     if is_decision_request(body.question):
-        write_rag_audit(body.application_id, body.question, decision, "refused", [], True)
+        write_rag_audit(body.application_id or "", body.question, decision or "", "refused", [], True)
         return AnalystAskResponse(
             status="refused",
             decision_outcome=decision,
@@ -40,7 +42,7 @@ async def ask(request: Request, body: AnalystAskRequest, user: dict = Depends(an
 
     query = _build_retrieval_query(body.question, snapshot)
     try:
-        chunks = retrieve(query, policy_version=snapshot.get("policy_version"))
+        chunks = retrieve(query, policy_version=snapshot.get("policy_version") if snapshot else None)
     except RetrievalUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 
@@ -67,7 +69,7 @@ async def ask(request: Request, body: AnalystAskRequest, user: dict = Depends(an
     ok, violations = validate_answer(raw, chunks, snapshot)
 
     cited = [b.get("chunk_id") for b in (raw.get("policy_basis") or [])]
-    write_rag_audit(body.application_id, body.question, decision, raw.get("status", "answered"), cited, ok)
+    write_rag_audit(body.application_id or "", body.question, decision or "", raw.get("status", "answered"), cited, ok)
 
     raw_status = raw.get("status", "answered")
     if raw_status == "refused" or not ok:

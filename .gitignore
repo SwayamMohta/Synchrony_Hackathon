@@ -21,6 +21,9 @@ ml/data/*
 node_modules/
 frontend/dist/
 frontend/.vite/
+Frontend syn/dist/
+Frontend syn/.vite/
+Frontend syn/node_modules/
 
 # OS / editor
 .DS_Store

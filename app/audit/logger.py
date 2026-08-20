@@ -1,6 +1,8 @@
 import json, os
 from sqlalchemy import create_engine, text
 
+from app.decisioning.profile import build_profile
+
 INSERT_SQL = """
 INSERT INTO audit_logs (
     application_id, decision, credit_risk_score, fraud_risk_score,
@@ -87,6 +89,31 @@ def read_audit_log(limit: int = 50) -> list[dict]:
     entries = [json.loads(l) for l in lines[-limit:]]
     return [_normalize_fallback(e) for e in reversed(entries)]
 
+def _ensure_profile(snapshot: dict) -> dict:
+    """Return a snapshot that always carries a computed ``profile``.
+
+    ``profile`` is stored in ``evidence`` for new decisions; for legacy rows
+    (written before profiles existed) it is recomputed from the stored inputs
+    so the frontend never has to derive display fields itself.
+    """
+    if snapshot.get("profile"):
+        return snapshot
+    inputs = snapshot.get("inputs") or {}
+    if not inputs:
+        snapshot["profile"] = {}
+        return snapshot
+    try:
+        snapshot["profile"] = build_profile(
+            inputs,
+            float(snapshot.get("credit_risk_score") or 0.0),
+            float(snapshot.get("fraud_risk_score") or 0.0),
+            snapshot.get("fraud_signals") or {},
+        )
+    except Exception:
+        snapshot["profile"] = {}
+    return snapshot
+
+
 def _normalize_db_row(r: dict) -> dict:
     rc = r.get("reason_codes") or []
     if isinstance(rc, str):
@@ -94,7 +121,9 @@ def _normalize_db_row(r: dict) -> dict:
     evidence = r.get("evidence") or {}
     if isinstance(evidence, str):
         evidence = json.loads(evidence)
-    return {
+    created_at = r.get("created_at")
+    timestamp = created_at.isoformat() if created_at is not None else None
+    return _ensure_profile({
         "decision": r.get("decision"),
         "credit_risk_score": r.get("credit_risk_score"),
         "fraud_risk_score": r.get("fraud_risk_score"),
@@ -103,13 +132,18 @@ def _normalize_db_row(r: dict) -> dict:
         "model_version": r.get("model_version"),
         "feature_schema_version": r.get("feature_schema_version"),
         "request_id": r.get("request_id"),
+        "application_id": r.get("request_id"),
         "applicant_id": r.get("application_id"),
         "inputs": evidence.get("inputs") or {},
-    }
+        "fraud_signals": evidence.get("fraud_signals") or {},
+        "shap_top_features": evidence.get("shap_top_features") or {},
+        "profile": evidence.get("profile") or {},
+        "timestamp": timestamp,
+    })
 
 def _snapshot_from_fallback(e: dict) -> dict:
     evidence = json.loads(e.get("ev") or "{}")
-    return {
+    return _ensure_profile({
         "decision": e.get("dec"),
         "credit_risk_score": e.get("cs"),
         "fraud_risk_score": e.get("fs"),
@@ -118,9 +152,14 @@ def _snapshot_from_fallback(e: dict) -> dict:
         "model_version": e.get("mv"),
         "feature_schema_version": e.get("fsv"),
         "request_id": e.get("rid"),
+        "application_id": e.get("rid"),
         "applicant_id": e.get("aid"),
         "inputs": evidence.get("inputs") or {},
-    }
+        "fraud_signals": evidence.get("fraud_signals") or {},
+        "shap_top_features": evidence.get("shap_top_features") or {},
+        "profile": evidence.get("profile") or {},
+        "timestamp": None,
+    })
 
 def get_decision_snapshot(identifier: str):
     """Return the immutable decision snapshot for an application.
@@ -153,6 +192,26 @@ def get_decision_snapshot(identifier: str):
             if e.get("rid") == identifier or e.get("aid") == identifier:
                 return _snapshot_from_fallback(e)
     return None
+
+def list_decision_snapshots(limit: int = 100) -> list[dict]:
+    """Return normalized decision snapshots for all applications, newest first."""
+    eng = _get_engine()
+    if eng:
+        try:
+            with eng.connect() as conn:
+                rows = conn.execute(
+                    text("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT :l"),
+                    {"l": limit},
+                ).mappings().all()
+            return [_normalize_db_row(dict(r)) for r in rows]
+        except Exception:
+            pass
+    if not os.path.exists(_FALLBACK_PATH):
+        return []
+    with open(_FALLBACK_PATH) as fh:
+        lines = fh.readlines()
+    entries = [json.loads(l) for l in lines[-limit:]]
+    return [_snapshot_from_fallback(e) for e in reversed(entries)]
 
 _RAG_FALLBACK_PATH = "ml/rag_audit_fallback.jsonl"
 

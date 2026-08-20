@@ -6,6 +6,7 @@ from app.rules.policy_engine import apply_policy, has_affordability_concern, pol
 from app.explain.shap_explainer import explain_decision
 from app.audit.logger import write_audit_log
 from app.schemas import DecisionResult
+from app.decisioning.profile import build_profile
 
 def _decide(policy, credit_score: float, fraud_score: float, affordability_concern: bool) -> str:
     if not policy.passed:
@@ -50,6 +51,8 @@ def run_decision_pipeline(applicant, request_id) -> DecisionResult:
     explanation = explain_decision(vector)  # SHAP explains the MODEL (kept separate)
     reason_codes = _build_reason_codes(policy, fraud_score, credit_score, affordability_concern)
 
+    profile = build_profile(applicant.model_dump(), credit_score, fraud_score, fraud_signals)
+
     write_audit_log(
         applicant_id=applicant.applicant_id,
         decision=decision,
@@ -65,6 +68,7 @@ def run_decision_pipeline(applicant, request_id) -> DecisionResult:
             "fraud_signals": fraud_signals,
             "feature_vector": dict(zip(names, vector)),
             "inputs": applicant.model_dump(),
+            "profile": profile,
         },
     )
     record_application(applicant.device_id, applicant.ip_address)
@@ -82,4 +86,6 @@ def run_decision_pipeline(applicant, request_id) -> DecisionResult:
         policy_version=POLICY_VERSION,
         request_id=request_id,
         latency_ms=0.0,
+        fraud_signals=fraud_signals,
+        profile=profile,
     )

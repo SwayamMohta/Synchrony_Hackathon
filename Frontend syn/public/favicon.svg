@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <!-- Hexagonal beehive backdrop -->
+  <path d="M32 3.5 56 17.6v28.8L32 60.5 8 46.4V17.6L32 3.5Z" fill="url(#bg)"/>
+  <path d="M32 3.5 56 17.6v28.8L32 60.5 8 46.4V17.6L32 3.5Z" stroke="#cbd5e1" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Bee body (horizontal oval, centered) -->
+  <ellipse cx="32" cy="34" rx="14" ry="9.5" fill="url(#body)"/>
+  <!-- Stripes -->
+  <path d="M25.5 25.4a8.8 8.8 0 0 1 4-1.9v20.9a8.8 8.8 0 0 1-4-1.9 9 9 0 0 1 0-17.1Z" fill="#0f172a" opacity="0.85"/>
+  <path d="M32 23.5v20.9a8.8 8.8 0 0 0 4-1.9 9 9 0 0 0 0-17.1 8.8 8.8 0 0 0-4-1.9Z" fill="#0f172a" opacity="0.55"/>
+  <path d="M38.5 25.4a8.8 8.8 0 0 0-4-1.9v20.9a8.8 8.8 0 0 0 4-1.9 9 9 0 0 0 0-17.1Z" fill="#0f172a" opacity="0.3"/>
+  <!-- Wings -->
+  <ellipse cx="22.5" cy="26" rx="5" ry="8" fill="#f8fafc" transform="rotate(-20 22.5 26)"/>
+  <ellipse cx="22.5" cy="42" rx="5" ry="8" fill="#f8fafc" transform="rotate(20 22.5 42)"/>
+  <ellipse cx="22.5" cy="26" rx="5" ry="8" fill="#e2e8f0" transform="rotate(-20 22.5 26)" opacity="0.35"/>
+  <ellipse cx="22.5" cy="42" rx="5" ry="8" fill="#e2e8f0" transform="rotate(20 22.5 42)" opacity="0.35"/>
+  <!-- Head highlight -->
+  <circle cx="44" cy="28" r="1.6" fill="#ffffff"/>
+  <defs>
+    <linearGradient id="bg" x1="18" y1="8" x2="46" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f8fafc"/>
+      <stop offset="0.45" stop-color="#cbd5e1"/>
+      <stop offset="1" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="body" x1="24" y1="26" x2="40" y2="43" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f1f5f9"/>
+      <stop offset="1" stop-color="#475467"/>
+    </linearGradient>
+  </defs>
+</svg>
