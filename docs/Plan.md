@@ -1,4 +1,4 @@
-# Implementation Plan: Next-Gen Credit Intelligence Engine (PRISM-style Underwriting System)
+# Implementation Plan: Next-Gen Credit Intelligence Engine (FinLens Underwriting System)
 
 ## 1. Problem Statement & Project Scope
 

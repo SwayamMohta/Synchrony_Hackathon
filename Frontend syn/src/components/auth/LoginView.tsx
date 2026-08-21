@@ -455,7 +455,7 @@ export const LoginView: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                 <div>
                   <div style={{ fontSize: 7, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cardholder</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: '#ffffff' }}>PRISM ELITE</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: '#ffffff' }}>FINLENS ELITE</div>
                 </div>
 
                 {/* Interlocking card circles logo */}

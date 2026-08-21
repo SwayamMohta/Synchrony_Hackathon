@@ -22,8 +22,6 @@ ml/data/*
 # Frontend / node (not needed in the backend image)
 node_modules
 Frontend syn
-frontend
-frontend/dist
 Frontend syn/dist
 
 # Runtime audit fallbacks

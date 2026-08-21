@@ -1,7 +1,7 @@
 # TRACKER
 
 ## Current objective
-Build a real-time, multi-modal credit underwriting engine (PRISM-style) that expands credit access to NTC/thin-file customers using alternative data and behavioral signals, with inline fraud detection and regulatory transparency (explainable decisions, audit trail).
+Build a real-time, multi-modal credit underwriting engine (FinLens) that expands credit access to NTC/thin-file customers using alternative data and behavioral signals, with inline fraud detection and regulatory transparency (explainable decisions, audit trail).
 
 ## Current active task
 Analytics "Applicant Stats" tab polish (uncommitted): fixed recharts Tooltip hover text being invisible (added `itemStyle`/`labelStyle` white) and replaced the 3 portfolio-wide charts with 3 per-applicant charts driven by `activeCase` (Risk Profile, Monthly Cash-Flow, Loan vs Income). Committed+ready state: everything since `2f9725d` is in commit `e8a63c6` (NOT yet pushed).
@@ -27,7 +27,7 @@ in-progress
 - **Dead component cleanup (user-confirmed)**: deleted `FraudInvestigation.tsx`, `FraudInvestigationPage.tsx`, `PendingCasesWidget.tsx`, `AuditTrail.tsx`, `ModelEvaluation.tsx`.
 - **RAG starter-query loose end fix**: 2 of 4 suggested query cards referenced nonexistent policy sections (DTI under 4.2; thin-file under 5.1) causing refusals; rewrote to reference real answerable content (verified `answered` with citations live).
 - **Analytics stats tab (this session, uncommitted)**: recharts Tooltip hover text now white (`itemStyle`/`labelStyle`); "Applicant Stats" tab shows per-applicant charts (Risk Profile / Monthly Cash-Flow / Loan vs Income) instead of portfolio aggregates; removed unused DECISION_COLORS/SEGMENT_COLORS.
-- **README.md rewritten** (PRISM overview, problem, solution, architecture mermaid, decision flow, API table, setup, limitations) with NO em dashes.
+- **README.md rewritten** (FinLens overview, problem, solution, architecture mermaid, decision flow, API table, setup, limitations) with NO em dashes.
 - **Favicon changed** to a bee mark matching the BeeBot/PolicyLens theme (`Frontend syn/public/favicon.svg`).
 - Tests: backend 83 passing; frontend 15/15 (PolicyAssistant + pages).
 

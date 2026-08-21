@@ -1,7 +1,7 @@
 # HANDOVER
 
 ## Current objective
-Credit underwriting engine (PRISM-style) for NTC/thin-file applicants: React + FastAPI + PostgreSQL(+pgvector) + XGBoost credit model + rule-based fraud + SHAP + deterministic policy + audit + JWT auth + RAG policy assistant. All Must-Have + RAG work complete and live-verified. This session did whole-website verification, fixed remaining loose ends, and committed + pushed everything to GitHub.
+Credit underwriting engine (FinLens) for NTC/thin-file applicants: React + FastAPI + PostgreSQL(+pgvector) + XGBoost credit model + rule-based fraud + SHAP + deterministic policy + audit + JWT auth + RAG policy assistant. All Must-Have + RAG work complete and live-verified. This session did whole-website verification, fixed remaining loose ends, and committed + pushed everything to GitHub.
 
 ## What was completed
 - Full Must-Have: React + FastAPI + PostgreSQL(+pgvector) + XGBoost credit model + rule-based fraud + SHAP + deterministic policy + audit (JSONL fallback) + JWT auth.
@@ -20,7 +20,7 @@ Credit underwriting engine (PRISM-style) for NTC/thin-file applicants: React + F
 - **Dead component cleanup (user-confirmed)**: deleted `FraudInvestigation.tsx`, `FraudInvestigationPage.tsx`, `PendingCasesWidget.tsx`, `AuditTrail.tsx`, `ModelEvaluation.tsx`.
 - **RAG starter-query loose end fix**: 2 of 4 suggested query cards referenced nonexistent policy sections (DTI under 4.2; thin-file under 5.1) causing refusals; rewrote to reference real answerable content (verified `answered` with citations live).
 - **Analytics stats tab**: recharts Tooltip hover text now white (`itemStyle`/`labelStyle`); "Applicant Stats" tab shows per-applicant charts (Risk Profile / Monthly Cash-Flow / Loan vs Income) instead of portfolio aggregates; removed unused DECISION_COLORS/SEGMENT_COLORS.
-- **README.md rewritten** (PRISM overview, problem, solution, architecture mermaid, decision flow, API table, setup, limitations) with NO em dashes.
+- **README.md rewritten** (FinLens overview, problem, solution, architecture mermaid, decision flow, API table, setup, limitations) with NO em dashes.
 - **Favicon changed** to a bee mark matching the BeeBot/PolicyLens theme (`Frontend syn/public/favicon.svg`).
 - Tests: backend 83 passing; frontend 15/15 (PolicyAssistant + pages).
 

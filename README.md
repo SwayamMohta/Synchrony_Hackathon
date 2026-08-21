@@ -1,6 +1,6 @@
-# PRISM - Underwriting Intelligence
+# FinLens - Underwriting Intelligence
 
-PRISM is a prototype underwriting intelligence system for retail credit. It combines
+FinLens is a prototype underwriting intelligence system for retail credit. It combines
 credit-risk analysis, rule-based policy evaluation, fraud signals, and explainability so
 that an analyst can understand why a given application was approved, referred, or declined.
 
@@ -26,7 +26,7 @@ traditional credit report, and doing so introduces its own risks and obligations
 
 ## Solution
 
-PRISM implements a deterministic, explainable decision workflow. There is no language model
+FinLens implements a deterministic, explainable decision workflow. There is no language model
 in the decision path; the outcome is produced by explicit, versioned rules and a credit-risk
 model, and every step is recorded.
 
@@ -260,7 +260,7 @@ docker compose up --build
 | Stop **and delete** database data | `docker compose down -v` |
 | Rebuild after code changes | `docker compose up -d --build` |
 
-> Data is stored in a named Docker volume (`prism-underwriting_pgdata`), so
+> Data is stored in a named Docker volume (`finlens_pgdata`), so
 > `docker compose down` keeps it and a later `docker compose up` restarts with
 > the same data. Use `docker compose down -v` only if you want a clean slate.
 

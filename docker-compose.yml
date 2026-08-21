@@ -1,4 +1,4 @@
-name: prism-underwriting
+name: finlens
 
 services:
   postgres:
@@ -19,7 +19,7 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - prism
+      - finlens
 
   backend:
     build:
@@ -46,7 +46,7 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - prism
+      - finlens
 
   frontend:
     build:
@@ -59,10 +59,10 @@ services:
     depends_on:
       - backend
     networks:
-      - prism
+      - finlens
 
 networks:
-  prism:
+  finlens:
     driver: bridge
 
 volumes:
