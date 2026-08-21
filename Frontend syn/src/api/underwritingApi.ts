@@ -1,10 +1,11 @@
 /**
  * underwritingApi.ts
  * Real HTTP client for the credit-underwriting backend.
- * Base URL: http://localhost:8000
+ * Base URL defaults to http://localhost:8000; override at build time with
+ * VITE_API_BASE_URL (e.g. when the backend is served from a different host).
  */
 
-const BASE = 'http://localhost:8000';
+const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // ─── Error types ─────────────────────────────────────────────────────────────
 

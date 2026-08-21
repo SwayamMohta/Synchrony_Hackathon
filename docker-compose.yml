@@ -1,3 +1,5 @@
+name: prism-underwriting
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -5,11 +7,63 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-uw}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-uw}
       POSTGRES_DB: ${POSTGRES_DB:-underwriting}
-    ports:
-      - "5432:5432"
+    # Postgres is reached by the backend over the internal network only
+    # (host "postgres"), so it is NOT published to the host. This avoids a
+    # port-5432 conflict for reviewers who already run Postgres locally.
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-uw} -d ${POSTGRES_DB:-underwriting}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - prism
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-uw}:${POSTGRES_PASSWORD:-uw}@postgres:5432/${POSTGRES_DB:-underwriting}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      JWT_EXPIRES_MIN: ${JWT_EXPIRES_MIN:-120}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL_ID: ${LLM_MODEL_ID:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL_ID: ${GEMINI_MODEL_ID:-gemini-3.6-flash}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai/}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-en-v1.5}
+      RERANK_MODEL: ${RERANK_MODEL:-cross-encoder/ms-marco-MiniLM-L-6-v2}
+      POLICIES_DIR: policies
+      FEATURE_METADATA: ml/feature_metadata.json
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - prism
+
+  frontend:
+    build:
+      context: ./Frontend syn
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - prism
+
+networks:
+  prism:
+    driver: bridge
 
 volumes:
   pgdata:

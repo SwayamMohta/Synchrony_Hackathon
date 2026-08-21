@@ -1,0 +1,22 @@
+# Version control
+.git
+.gitignore
+
+# Local env / secrets
+.env
+.env.local
+
+# Node
+node_modules
+dist
+.vite
+
+# Tests / config not needed in the image
+src/test
+vitest.config.ts
+
+# Editor / OS
+.idea
+.vscode
+.DS_Store
+Thumbs.db

@@ -204,6 +204,100 @@ admin-only.
 
 ## Getting Started
 
+### Run with Docker (recommended)
+
+The fastest way to run the whole stack (PostgreSQL + pgvector, backend, and
+frontend) is with Docker Compose. You do **not** need to install Node, npm,
+Python, PostgreSQL, or pgvector yourself.
+
+Requirements:
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (installed
+  and **running**; it bundles Docker Compose)
+
+#### Step 1: Clone and enter the project
+
+```bash
+git clone <repository>
+cd <repository>
+```
+
+#### Step 2: Build and start everything
+
+```bash
+docker compose up --build
+```
+
+- The first build takes a few minutes: the backend image trains the credit
+  model from the committed dataset, and the frontend installs its npm
+  dependencies and builds the static bundle.
+- This command starts **three services together**: `postgres` (PostgreSQL +
+  pgvector), `backend` (FastAPI), and `frontend` (the Vite UI).
+- Once ready, the backend applies the DB schema automatically, ingests the
+  policy corpus for the RAG assistant, and starts serving.
+
+#### Step 3: Open the app
+
+- Frontend (UI): http://localhost:5173
+- API docs (Swagger): http://localhost:8000/docs
+
+#### Step 4: Log in
+
+| Username | Password | Role |
+|----------|----------|------|
+| `analyst` | `analyst123` | Analyst |
+| `admin` | `admin123` | Admin |
+
+#### Stopping and managing the stack
+
+| Task | Command |
+|------|---------|
+| Start in the background (no logs in the terminal) | `docker compose up -d --build` |
+| View live logs | `docker compose logs -f` |
+| Logs for one service | `docker compose logs -f backend` |
+| See container status | `docker compose ps` |
+| Stop (database data is **kept**) | `docker compose down` |
+| Stop **and delete** database data | `docker compose down -v` |
+| Rebuild after code changes | `docker compose up -d --build` |
+
+> Data is stored in a named Docker volume (`prism-underwriting_pgdata`), so
+> `docker compose down` keeps it and a later `docker compose up` restarts with
+> the same data. Use `docker compose down -v` only if you want a clean slate.
+
+#### Optional configuration
+
+Copy `.env.example` to `.env` to override defaults:
+
+```bash
+cp .env.example .env
+```
+
+Relevant variables:
+
+- `VITE_API_BASE_URL` - where the browser calls the backend (default
+  `http://localhost:8000`; change only if the backend is on a different host).
+- `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL_ID` (or `GEMINI_API_KEY`) - an
+  LLM for the policy assistant. Leave blank to use the offline, grounded
+  fallback.
+- `JWT_SECRET` - change this for anything other than local demo use.
+
+All defaults are local demo values; the seed users `analyst` / `analyst123`
+and `admin` / `admin123` are demo credentials.
+
+#### Troubleshooting
+
+- **"port is already allocated" on 5173 or 8000** - something else on your
+  machine (e.g. a local `npm run dev` or `uvicorn`) is using the port. Stop
+  that process, then retry.
+- **Postgres is not published on host port 5432** - the backend reaches it
+  over the internal Docker network only. This is intentional, so it does not
+  conflict if you already run Postgres locally.
+- **First RAG / policy-assistant query is slow** - the embedding and
+  reranker models (~220 MB total) download once on first use. Later queries
+  are fast.
+
+### Manual (without Docker)
+
 ### Prerequisites
 
 - Python 3.10+

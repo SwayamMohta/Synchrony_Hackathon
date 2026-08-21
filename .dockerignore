@@ -1,0 +1,45 @@
+# Version control
+.git
+.gitignore
+
+# Local env / secrets
+.env
+*.env.local
+
+# Python
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+
+# Model artifacts & local data (retrained at build; not copied)
+app/models/artifacts/*
+!app/models/artifacts/.gitkeep
+ml/data/*
+!ml/data/.gitkeep
+
+# Frontend / node (not needed in the backend image)
+node_modules
+Frontend syn
+frontend
+frontend/dist
+Frontend syn/dist
+
+# Runtime audit fallbacks
+ml/audit_fallback.jsonl
+ml/rag_audit_fallback.jsonl
+
+# Large / redundant data
+dataset.zip
+ieee-fraud-detection
+*.pdf
+policies/*.pdf
+
+# Docs / config not needed at runtime
+docs
+HANDOVER.md
+TRACKER.md
+Dockerfile
+backend.Dockerfile
+docker-compose.yml
